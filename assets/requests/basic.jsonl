@@ -1,0 +1,8 @@
+{"id":1,"method":"health","params":{}}
+{"id":2,"method":"symbols","params":{"name":"apply_discount"}}
+{"id":3,"method":"def","params":{"name":"apply_discount"}}
+{"id":4,"method":"ref","params":{"name":"apply_discount"}}
+{"id":5,"method":"read","params":{"file":"src/orders.py#apply_discount"}}
+{"id":6,"method":"context","params":{"file":"src/orders.py","line":20}}
+{"id":7,"method":"search","params":{"pattern":"registry","limit":3,"extensions":[".ts"]}}
+{"id":8,"method":"tree","params":{"depth":2}}
