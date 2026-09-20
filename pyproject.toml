@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aisearch"
+version = "0.1.0"
+description = "AI-optimized code search and navigation — zero-config grep/LSP replacement"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+keywords = ["ai", "search", "code", "grep", "lsp", "navigation"]
+authors = [{ name = "aisearch" }]
+dependencies = []
+
+[project.optional-dependencies]
+full = ["tree-sitter>=0.21", "tree-sitter-languages>=1.10"]
+test = ["pytest>=7.0"]
+
+[project.scripts]
+aisearch = "aisearch.cli:main"
+
+[project.urls]
+Homepage = "https://example.com/aisearch"
+
+[tool.setuptools.packages.find]
+include = ["aisearch*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

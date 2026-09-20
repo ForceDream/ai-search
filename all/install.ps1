@@ -1,0 +1,86 @@
+# aisearch universal installer - Windows (PowerShell)
+#
+# Installs the Python package at the repository root (editable) and checks the
+# zero-dependency Node port.
+#
+# Usage:
+#   powershell -ExecutionPolicy Bypass -File all\install.ps1
+#   powershell -ExecutionPolicy Bypass -File all\install.ps1 -Test
+#   powershell -ExecutionPolicy Bypass -File all\install.ps1 -Full -NoJs
+#   powershell -ExecutionPolicy Bypass -File all\install.ps1 -Skill       # project-level
+#   powershell -ExecutionPolicy Bypass -File all\install.ps1 -SkillUser   # user-level
+#
+# Env:
+#   $env:PYTHON = "py"                     # override the interpreter command
+#   $env:VENV = "1"                        # create .venv first, then install
+[CmdletBinding()]
+param(
+    [switch]$Test,
+    [switch]$Full,
+    [switch]$NoJs,
+    [switch]$Skill,
+    [switch]$SkillUser
+)
+
+$ErrorActionPreference = "Stop"
+$Here = Split-Path -Parent $MyInvocation.MyCommand.Path
+$Repo = Split-Path -Parent $Here
+
+$Py = if ($env:PYTHON) { $env:PYTHON } else { $null }
+if (-not $Py) {
+    foreach ($cand in @("python", "py")) {
+        if (Get-Command $cand -ErrorAction SilentlyContinue) { $Py = $cand; break }
+    }
+}
+if (-not $Py) {
+    Write-Error "Python not found. Install Python >= 3.9 first (https://www.python.org/downloads/)."
+    exit 1
+}
+
+if ($env:VENV -eq "1" -and -not (Test-Path (Join-Path $Repo ".venv"))) {
+    Write-Host "== creating .venv =="
+    & $Py -m venv (Join-Path $Repo ".venv")
+    $Py = Join-Path $Repo ".venv\Scripts\python.exe"
+}
+
+Write-Host "== platform: Windows | Python: $(& $Py --version 2>&1) =="
+
+$extras = @()
+if ($Test) { $extras += "test" }
+if ($Full) { $extras += "full" }
+$target = if ($extras.Count -gt 0) { "$Repo[" + ($extras -join ",") + "]" } else { $Repo }
+
+Write-Host "== installing aisearch (Python) =="
+& $Py -m pip install -e $target
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+if (-not $NoJs) {
+    Write-Host "== checking Node port =="
+    if (Get-Command node -ErrorAction SilentlyContinue) {
+        Write-Host ("node " + (node --version) + " found (aisearch-js has zero npm deps).")
+        Write-Host ("Optional global command: cd `"$Repo\aisearch-js`"; npm link")
+    } else {
+        Write-Host "node not found - skipping; the Node port requires Node >= 18."
+        Write-Host "  install: winget install OpenJS.NodeJS.LTS"
+    }
+}
+
+Write-Host ""
+if ($Skill -or $SkillUser) {
+    $skillDest = if ($SkillUser) { Join-Path $env:USERPROFILE ".codebuddy\skills" }
+                 else { Join-Path (Get-Location) ".codebuddy\skills" }
+    Write-Host "== installing CodeBuddy skill =="
+    $src = Join-Path $Repo "all\skill\aisearch"
+    $dst = Join-Path $skillDest "aisearch"
+    New-Item -ItemType Directory -Force -Path $skillDest | Out-Null
+    if (Test-Path $dst) { Remove-Item -Recurse -Force $dst }
+    Copy-Item -Recurse -Force $src $dst
+    Write-Host "  -> $dst"
+    Write-Host ""
+}
+
+Write-Host "Done."
+Write-Host "  aisearch --version                                    # Python CLI"
+Write-Host "  aisearch rpc                                          # stdio mode for AI harnesses"
+Write-Host "  node `"$Repo\aisearch-js\bin\aisearch.mjs`" --help    # Node CLI (without npm link)"
+Write-Host "  For CodeBuddy/VibeCode skill: .\all\install.ps1 -Skill   (or -SkillUser)"

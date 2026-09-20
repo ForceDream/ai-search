@@ -1,0 +1,17 @@
+{
+  "name": "aisearch-js",
+  "version": "0.1.0",
+  "description": "AI-optimized code search and navigation — Node.js port of aisearch (zero npm dependencies)",
+  "type": "module",
+  "bin": {
+    "aisearch-js": "bin/aisearch.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "keywords": ["ai", "search", "code", "grep", "navigation"],
+  "scripts": {
+    "start": "node bin/aisearch.mjs"
+  }
+}
