@@ -169,12 +169,13 @@ class ContextResult:
     def to_dict(self) -> dict:
         if not self.ok:
             return {"ok": False, "error": self.error}
+        # 字段顺序刻意安排：metadata（file/line/language/containing_symbol...）在前，
+        # 大体积的 content 放最后——避免 Agent 只解析 JSON 前段就误判「没有 containing_symbol」。
         d: dict = {
             "ok": True,
             "data": {
                 "file": self.file,
                 "line": self.line,
-                "content": self.content,
             },
         }
         if self.language:
@@ -191,6 +192,7 @@ class ContextResult:
             d["data"]["window_start"] = self.window_start
         if self.truncated:
             d["data"]["truncated"] = True
+        d["data"]["content"] = self.content
         return d
 
 

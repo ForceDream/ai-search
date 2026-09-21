@@ -42,8 +42,8 @@ python "${CODEBUDDY_SKILL_DIR}/scripts/aisearch_rpc.py" --root . def '{"name":"<
 | 任务 | 用什么 | 为什么 |
 |---|---|---|
 | 纯文本 / 正则定位 | **自带 Grep**（ripgrep） | 最快（~2s vs 本工具 4.5s），自动忽略 node_modules |
-| 符号问答：定义在哪 / 谁调用 / 影响面 / 歧义展开 | **repo-context**（持久索引） | `index` 一次秒级，之后问答毫秒级；本工具无索引，每次全量扫描 |
-| 读函数体 / 行归属 / 批量精读 | **本工具** `read file#符号` / `context` | O(单文件)，实测 9 请求共 0.5s，比整文件读取省 token |
+| 符号问答：定义在哪 / **谁调用（callers）** / **影响面（impact）** / **枢纽榜（hubs）** / **按任务关键词找码（for）** / 歧义展开 | **repo-context**（持久索引） | `index` 一次秒级（实测 3.1s / 367 文件），之后每条查询 <0.3s；callers / impact / hubs 是本工具与 Grep 都没有的能力 |
+| 读函数体 / 行归属（**含 Rust**，返回 `containing_symbol`）/ 批量精读 | **本工具** `read file#符号` / `context` | O(单文件)，实测 9 请求共 0.5s（含 Rust 3 请求 0.4s）；输出 metadata 前置、`content` 殿后 |
 | 大文件（>200k 字符） | **本工具** 行范围读取 | 有截断保护，不会把大文件全量拉进上下文 |
 | 结构化符号感知搜索 | 本工具 `search` / `symbols` | 输出结构化 JSON；**仅限小项目**，大项目首轮定位交给上面两行 |
 
