@@ -111,12 +111,13 @@ export function read_result_to_dict(r) {
 export function context_result_to_dict(r) {
   if (!r.ok) return { ok: false, error: r.error };
   const [content, capped] = _cap_content(r.content ?? "");
+  // 字段顺序刻意安排：metadata（file/line/language/containing_symbol...）在前，
+  // 大体积的 content 放最后——避免 Agent 只解析 JSON 前段就误判「没有 containing_symbol」。
   const d = {
     ok: true,
     data: {
       file: r.file,
       line: r.line,
-      content,
     },
   };
   if (r.language) d.data.language = r.language;
@@ -126,6 +127,7 @@ export function context_result_to_dict(r) {
   if (r.total_lines) d.data.total_lines = r.total_lines;
   if (r.window_start) d.data.window_start = r.window_start;
   if (capped) d.data.truncated = true;
+  d.data.content = content;
   return d;
 }
 

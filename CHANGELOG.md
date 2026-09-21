@@ -24,3 +24,7 @@
 
 - `SKILL.md` 顶部新增「什么时候用我（触发词）」与最短上手命令。
 - 新增「常见问题（FAQ）」，含**错误信息 → 怎么办**对照表（`Missing 'pattern'`、`escapes project root`、`Binary file; not text`、`truncated: true` 等）。
+
+### 代码修正（已入库，随下次发版生效）
+
+- **`context` 输出字段重排**：metadata（`file` / `line` / `language` / `containing_symbol` / `imports` / `total_lines` / `window_start` / `truncated`）前置、大体积的 `content` 殿后。此前 `content` 排在 `containing_symbol` 之前，Agent 只解析 JSON 前段就误判「Rust 没有 containing_symbol」（实测报告曾误报此缺口，实际 Rust 一直正常返回）。Python / Node 双实现同步。
