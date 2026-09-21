@@ -28,7 +28,7 @@ aisearch rpc --root /path/to/proj  # 锁定项目根（boundary=root，拦截 ..
 | `def` | `name`(必), `path`, `limit`?=50, `substring_fallback`?=true | **两级匹配**：exact 优先——候选全部来自定义正则且符号名完全相等（`match_mode:"exact"`），杜绝子串命中稀释与 import/使用行混入；exact 无命中时回退子串匹配并标 `match_mode:"substring"`（候选需核对）。`substring_fallback:false` 关闭回退。排序：精确名 > class/struct/interface/trait > enum/type > function > method > 行号 |
 | `ref` | `name`(必), `path`, `limit`=100 | 同 `search`（全词匹配的引用位置） |
 | `read` | `file`(必), `path`, `outline`=false | `file`, `lines{start,end}`, `total_lines`, `content`, `language?`, `symbol?`, `symbols?`(human/大纲时), `truncated?` |
-| `context` | `file`(必), `line`(必), `radius`=5, `path` | `file`, `line`, `content`, `language?`, `containing_symbol?`, `imports?`, `total_lines?`, `window_start?`, `truncated?` |
+| `context` | `file`(必), `line`(必), `radius`=5, `path` | **metadata 前置、`content` 殿后**：`file`, `line`, `language?`, `containing_symbol?`, `imports?`, `total_lines?`, `window_start?`, `truncated?`, `content`（含 Rust 在内的各语言均返回 `containing_symbol`） |
 | `tree` | `path`, `depth`=3 | `root`, `tree[{name,type:"dir"｜"file",children?,lang?,size?}]`, `project_root?` |
 | `health` | `{}` | `version`, `methods`, `root`, `boundary` |
 
