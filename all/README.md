@@ -125,31 +125,19 @@ aisearch rpc --root /path/to/proj  # 锁定项目根（boundary=root，拦截 ..
 
 ---
 
-## 接入 CodeBuddy / VibeCode（Skill）
+## 接入 CodeBuddy / SkillHub（Skill 形态）
 
-`all/skill/aisearch/` 是一个可直接导入的 **CodeBuddy Skill**：装好后，AI 会在"查定义 / 找引用 / 读某个函数 / 看项目结构"等场景自动使用本工具，无需你每次提示。
-
-```
-all/skill/aisearch/
-├── SKILL.md                    # 技能入口（frontmatter 的 name + description 决定触发时机）
-├── scripts/aisearch_rpc.py     # 原生工具：一次会话发 1..N 个 rpc 请求
-└── references/protocol.md      # 完整协议与参考（按需加载，保持 SKILL.md 精简）
-```
-
-安装（任选其一）：
+技能形态**不在本分支维护**，改由本仓库的 **`skill` 分支**承载（避免同一份代码维护两处副本而产生分叉）：
 
 ```bash
-bash all/install.sh --skill        # 项目级 → ./.codebuddy/skills/aisearch
-bash all/install.sh --skill-user   # 用户级 → ~/.codebuddy/skills/aisearch
-```
-```powershell
-.\all\install.ps1 -Skill           # 项目级
-.\all\install.ps1 -SkillUser       # 用户级
+git checkout skill        # 技能分支布局：
+                          # SKILL.md + scripts/{aisearch_rpc.py, aisearch/, aisearch-js/}
+                          #           + references/ + assets/
 ```
 
-也可手动把 `all/skill/aisearch/` 复制到工作区 `.codebuddy/skills/`（**目录名即技能名**），或在 CodeBuddy 设置页用「导入 Skill」导入。
+把该分支内容放进 Agent 的技能目录（CodeBuddy 为 `~/.codebuddy/skills/aisearch/`，**目录名即技能名**），或从 SkillHub 安装 slug `aisearch`。
 
-技能触发后，AI 通过 `scripts/aisearch_rpc.py` 调 `rpc`（单进程常驻），而不是每次冷启动 CLI。
+技能触发后，AI 通过 `scripts/aisearch_rpc.py` 调 `rpc`（单进程常驻）。同一份 `SKILL.md` **同时满足两个平台的字段要求**：CodeBuddy 认 `name` / `description` / `allowed-tools`，SkillHub 认 `slug` / `version` / `displayName`。
 
 ---
 
@@ -163,12 +151,6 @@ bash all/install.sh --skill-user   # 用户级 → ~/.codebuddy/skills/aisearch
 | `install.ps1` | Windows | 安装脚本（PowerShell 5.1+） |
 | `install.cmd` | Windows | cmd 入口，等价转发到 `install.ps1` |
 
-### Skill 包（接入 CodeBuddy / VibeCode）
-
-| 路径 | 说明 |
-|---|---|
-| `skill/aisearch/` | 可直接导入的 Skill：`SKILL.md` + `scripts/aisearch_rpc.py` + `references/protocol.md` |
-
 ### 整库快照（可选，按需使用）
 
 | 文件 | 说明 |
@@ -176,6 +158,8 @@ bash all/install.sh --skill-user   # 用户级 → ~/.codebuddy/skills/aisearch
 | `gen_bundle.py` | 生成下列两个快照 |
 | `SOURCE.md` | 把全仓源码拼成**单文件**（含文件清单 + 行数 + 内容） |
 | `aisearch-source.tar.gz` | 同一文件集合的 tar 归档 |
+
+**快照产物不入库**（`.gitignore` 已排除 `all/*.tar.gz` 与 `all/SOURCE.md`），需要时本地生成。
 
 **这两个快照是"整库可读 / 可交付"的便捷产物，不是运行必需品**：仓库本身（或 `pip install -e .`）才是权威来源，快照只是它的**副本**。适用场景只有两类：
 

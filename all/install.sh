@@ -8,8 +8,7 @@
 #   bash all/install.sh --test       # 附加测试依赖（pytest）
 #   bash all/install.sh --full       # 附加可选增强（tree-sitter）
 #   bash all/install.sh --no-js      # 跳过 Node 检查
-#   bash all/install.sh --skill      # 另装 CodeBuddy Skill 到 ./.codebuddy/skills
-#   bash all/install.sh --skill-user # 另装 Skill 到 ~/.codebuddy/skills
+#   （技能形态不在本分支维护，见仓库的 skill 分支：git checkout skill）
 #
 # 环境变量:
 #   PYTHON=python3.12 bash all/install.sh     # 指定解释器
@@ -57,10 +56,8 @@ for a in "$@"; do
     --test)   EXTRAS="${EXTRAS:+$EXTRAS,}test" ;;
     --full)   EXTRAS="${EXTRAS:+$EXTRAS,}full" ;;
     --no-js)  DO_JS=0 ;;
-    --skill)      SKILL_DEST="$PWD/.codebuddy/skills" ;;
-    --skill-user) SKILL_DEST="${HOME}/.codebuddy/skills" ;;
     -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
-    *) echo "未知参数: $a（可用: --test --full --no-js --skill --skill-user）" >&2; exit 2 ;;
+    *) echo "未知参数: $a（可用: --test --full --no-js）" >&2; exit 2 ;;
   esac
 done
 
@@ -85,11 +82,9 @@ fi
 
 if [ -n "$SKILL_DEST" ]; then
   echo "== 安装 CodeBuddy Skill =="
-  mkdir -p "$SKILL_DEST"
-  rm -rf "$SKILL_DEST/aisearch"
-  cp -R "$REPO/all/skill/aisearch" "$SKILL_DEST/aisearch"
-  chmod +x "$SKILL_DEST/aisearch/scripts/aisearch_rpc.py" 2>/dev/null || true
-  echo "  -> $SKILL_DEST/aisearch"
+  echo "  已废弃：技能形态改由本仓库的 skill 分支承载（git checkout skill）。"
+  echo "  见 README「与 Grep / repo-context 的分工」与 skill 分支的 SKILL.md。"
+  SKILL_DEST=""
 fi
 
 echo
@@ -97,4 +92,4 @@ echo "安装完成。"
 echo "  aisearch --version                                 # Python CLI"
 echo "  aisearch rpc                                       # AI harness 用的 stdio 模式"
 echo "  node \"$REPO/aisearch-js/bin/aisearch.mjs\" --help  # Node CLI（未 npm link 时）"
-echo "  需要接入 CodeBuddy/VibeCode 技能时：bash all/install.sh --skill（或 --skill-user）"
+echo "  技能形态（CodeBuddy / SkillHub）：见本仓库 skill 分支（git checkout skill）"

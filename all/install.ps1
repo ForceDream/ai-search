@@ -67,15 +67,9 @@ if (-not $NoJs) {
 
 Write-Host ""
 if ($Skill -or $SkillUser) {
-    $skillDest = if ($SkillUser) { Join-Path $env:USERPROFILE ".codebuddy\skills" }
-                 else { Join-Path (Get-Location) ".codebuddy\skills" }
     Write-Host "== installing CodeBuddy skill =="
-    $src = Join-Path $Repo "all\skill\aisearch"
-    $dst = Join-Path $skillDest "aisearch"
-    New-Item -ItemType Directory -Force -Path $skillDest | Out-Null
-    if (Test-Path $dst) { Remove-Item -Recurse -Force $dst }
-    Copy-Item -Recurse -Force $src $dst
-    Write-Host "  -> $dst"
+    Write-Host "  Deprecated: the skill form now lives on this repo's 'skill' branch"
+    Write-Host "  (git checkout skill). See README and the branch's SKILL.md."
     Write-Host ""
 }
 

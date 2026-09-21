@@ -1,5 +1,7 @@
 # aisearch — AI 友好的代码搜索与阅读工具
 
+> English: [README.en.md](README.en.md) ｜ 更新日志：[CHANGELOG.md](CHANGELOG.md)
+
 > 针对三个痛点设计：**grep 输出无结构、LSP 太重、AI 默认不用高级工具**。
 > 核心思路：**零依赖安装、JSON 输出、regex 提取符号（不需要 LSP）、内置 stdio rpc 无服务模式**。
 
@@ -36,9 +38,9 @@ pytest
 ```
 
 > 仓库同时包含 Node.js 零依赖移植版（`aisearch-js/`），CLI 行为与 JSON 协议与 Python 版逐字段对齐。
-> 通用版目录 [`all/`](all/)：跨平台安装脚本与文档；另附**可选的整库源码快照**（`SOURCE.md` 单文件 / `tar.gz` 归档，由 `python all/gen_bundle.py` 生成），供"离线通读整个仓库"或"脱离 git 整包交付"使用——**AI 读代码请优先用 `rpc`/`cat` 按需检索，比喂整库快照省 4.9–7.8x token**。
+> 通用目录 [`all/`](all/)：跨平台安装脚本与文档；另有**可选的整库源码快照**（`SOURCE.md` / `tar.gz`，由 `python all/gen_bundle.py` **现场生成、产物不入库**），供离线通读或脱离 git 整包交付——**AI 读代码请优先用 `rpc` / `read <file>#<sym>` 按需检索，比喂整库快照省 4.9–7.8x token**。
 >
-> 接入 **CodeBuddy / VibeCode**：`bash all/install.sh --skill`（项目级）或 `--skill-user`（用户级；Windows 用 `.\all\install.ps1 -Skill`）。它会把 `all/skill/aisearch/` 装成技能，之后 AI 在"查定义 / 找引用 / 读某个函数 / 看项目结构"时会自动走 `rpc` 检索，而不必你每次提示。
+> 接入 **CodeBuddy / SkillHub**：技能形态在本仓库的 **`skill` 分支**（`git checkout skill`），main 分支不再随附技能副本；SkillHub 安装 slug `aisearch`。
 
 > 零依赖模式下核心功能完全可用；ripgrep 若存在则自动启用（搜索快 10x+），不存在时回退到纯 Python 正则。
 
@@ -131,6 +133,20 @@ resp = json.loads(proc.stdout.readline())
 
 ---
 
+## 三层分工（实测结论，大项目必读）
+
+本工具不是"万能检索器"。按实测（2.4 GB / 3464 文件 / Rust + TS + Python 三语言项目）分工如下：
+
+| 任务 | 工具 | 为什么 |
+|---|---|---|
+| 简单文本 / 正则定位 | **自带 Grep**（ripgrep） | 单次最快（~2s），自动忽略 `node_modules` |
+| 在哪实现 / `callers` / `impact` / `hubs` / `for` / 仓库笔记 | **[repo-context](https://github.com/ForceDream/repo-context)** | `index` 一次秒级（实测 3.1s / 367 文件），之后每条查询 <0.3s；这些能力本工具与 Grep 都没有 |
+| 读函数体 / 行归属 / 大文件分页 | **本工具** | `read <file>#<sym>` / `context` 是 O(单文件) 操作（实测 3 请求 0.4s），输出 metadata 前置、`content` 殿后 |
+
+**关键**：本工具的 `search` / `def` / `ref` / `symbols` 每次都是**全量扫描**（实测 ~4.5s / 3464 文件，无索引缓存）——rpc 常驻只省进程启动，**不省扫描**。大项目请**先定位（Grep / repo-context），再精读（本工具）**，不要用本工具做首轮定位。
+
+---
+
 ## 为什么比 grep + LSP 好？
 
 | 维度 | grep | LSP | aisearch |
@@ -140,7 +156,7 @@ resp = json.loads(proc.stdout.readline())
 | 符号搜索 | 不支持 | 支持但配置复杂 | **正则提取，零配置** |
 | 语义上下文 | 仅周围 N 行 | 有，但需 LSP 运行 | **自动识别所属函数/类** |
 | 按符号读取 | 不支持 | 需要客户端 | **`cat file.py#func`** |
-| 持久化 | 无 | 有但重 | **rpc 长驻子进程（零端口）** |
+| 常驻 / 索引 | 每次重扫 | 需常驻语言 server | **rpc 长驻子进程（零端口）**；但无索引，每次查询仍全量扫描 |
 | AI 友好度 | 低 | 中 | **高** |
 
 ---
@@ -150,18 +166,23 @@ resp = json.loads(proc.stdout.readline())
 ```
 aisearch/
 ├── pyproject.toml
-├── README.md
-├── LICENSE
-├── aisearch/
-│   ├── __init__.py
-│   ├── __main__.py
-│   ├── cli.py          # CLI 入口
-│   ├── config.py       # 配置、语言检测、ignore、路径安全
-│   ├── symbols.py      # 符号提取（regex）
-│   ├── engine.py       # 核心搜索引擎（ripgrep / 纯 Python 回退）
-│   ├── reader.py       # 智能文件阅读
-│   └── rpc.py          # stdio 无服务模式（零端口）
-└── tests/
+├── README.md / README.en.md / CHANGELOG.md / LICENSE / SKILL.md
+├── aisearch/                   # Python 实现（核心）
+│   ├── cli.py                  # CLI 入口
+│   ├── config.py               # 配置、语言检测、ignore、路径安全
+│   ├── symbols.py              # 符号提取（regex）
+│   ├── engine.py               # 核心搜索引擎（ripgrep / 纯 Python 回退）
+│   ├── reader.py               # 智能文件阅读
+│   └── rpc.py                  # stdio 无服务模式（零端口）
+├── aisearch-js/                # Node 实现（零 npm 依赖，协议逐字段对齐）
+│   ├── bin/aisearch.mjs
+│   ├── src/{config,engine,reader,rpc,symbols,util}.mjs
+│   ├── tests/                  # 双实现冒烟 + 鲁棒性 fuzz
+│   └── bench/                  # 基准脚本与报告
+├── all/                        # 跨平台安装脚本 + 快照生成（产物不入库）
+├── assets/                     # 示例语料（demo + rpc 请求样例）
+├── references/                 # protocol.md（完整协议）/ examples.md（真实样例）
+└── tests/                      # Python 测试（pytest）
 ```
 
 ---
