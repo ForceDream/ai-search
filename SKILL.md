@@ -13,7 +13,15 @@ license: MIT
 # aisearch
 
 零依赖代码检索工具，本技能自带 Python 与 Node 两套实现（CLI 行为与 JSON 协议逐字段一致）。
-**AI 用 `rpc`（单进程常驻，跨请求不付冷启动）；人类用 CLI。**
+
+> **⚠️ Agent 调用铁律：一律走 rpc —— `python "${CODEBUDDY_SKILL_DIR}/scripts/aisearch_rpc.py" --root <项目根> <method> '<params>'`。**
+> **禁止**用 `python -m aisearch` / `node aisearch.mjs` 这类 CLI 直调（CLI 每个请求都重付一次进程启动；rpc 单进程常驻、可批量）。
+> 默认（不带 `--tool`）就是 **Python 实现**，启动链最短、总耗时最低（实测 4.7s vs Node 6.4s）；`--tool` 切 Node 仅在无 Python 环境的机器上使用。
+> CLI 形态仅供人类在终端手动使用。
+
+注意：rpc 常驻省的是**进程启动**（约零点几秒）；
+`search` / `def` / `ref` / `symbols` 每次仍是**全量扫描**（O(语料)，无索引缓存，实测 ~4.5s / 3464 文件）；
+`read` / `context` / `tree` 只碰单文件，几乎零成本。
 
 只要机器上有 **Python >= 3.9 或 Node** 之一即可，无需安装、不监听端口。
 
@@ -28,6 +36,18 @@ python "${CODEBUDDY_SKILL_DIR}/scripts/aisearch_rpc.py" --root . def '{"name":"<
 ```
 
 查一个符号一次调用就够；要连续查多个，用下节的 `--stdin` 批量（一次会话多请求，不重复付进程启动）。
+
+## 与 Grep / repo-context 的分工（实测结论，大项目必读）
+
+| 任务 | 用什么 | 为什么 |
+|---|---|---|
+| 纯文本 / 正则定位 | **自带 Grep**（ripgrep） | 最快（~2s vs 本工具 4.5s），自动忽略 node_modules |
+| 符号问答：定义在哪 / 谁调用 / 影响面 / 歧义展开 | **repo-context**（持久索引） | `index` 一次秒级，之后问答毫秒级；本工具无索引，每次全量扫描 |
+| 读函数体 / 行归属 / 批量精读 | **本工具** `read file#符号` / `context` | O(单文件)，实测 9 请求共 0.5s，比整文件读取省 token |
+| 大文件（>200k 字符） | **本工具** 行范围读取 | 有截断保护，不会把大文件全量拉进上下文 |
+| 结构化符号感知搜索 | 本工具 `search` / `symbols` | 输出结构化 JSON；**仅限小项目**，大项目首轮定位交给上面两行 |
+
+一句话：**先定位（Grep / repo-context），再精读（本工具）**；不要用本工具的 `search` 做大项目的首轮定位。
 
 ## 调用
 
@@ -117,6 +137,7 @@ Get-Content "${CODEBUDDY_SKILL_DIR}\assets\requests\basic.jsonl" | python "${COD
 - 搜不到中文标识符？→ 编码自动探测（UTF-8 / GB18030），正常可搜；中文乱码只出现在未走探测的老边界，属已知限制。
 - 凭什么说比 `grep` 省 token？→ 只回结构化片段（`file`/`line`/`line_end`/`text`）而非全部命中行；实测高频词场景输出体积约为 `grep -rn` 的 **1/15**。
 - 需要跨机器/跨语言一致行为？→ Python 与 Node 两套实现**逐字段一致**，仅 rpc 的 `elapsed_ms` 与空白不同。
+- rpc 常驻会话为什么第二次 `search` 还是慢？→ 常驻省的只是**进程启动**；`search` / `def` / `ref` / `symbols` 每次都是全量扫描（无索引缓存）。大项目请改用 repo-context（持久索引，问答毫秒级），或先 Grep 定位、再用本工具 `read` / `context` 精读。
 
 ## 参考（按需加载）
 
