@@ -1,20 +1,21 @@
 ---
 name: aisearch
-slug: aisearch
-displayName: aisearch — 精确定位与阅读代码的检索工具
-version: 1.0.1
-description: "精确定位与阅读代码的检索工具，替代 grep -rn 与 LSP。用于：查出某个符号（函数、类、方法、类型）定义在哪，谁引用了它，读取某个函数的完整实现，查看某一行所属的函数及其上下文，快速掌握项目目录结构。返回结构化 JSON 且只取所需片段，token 消耗比 grep 或整文件读取低数倍。触发词：查定义、找引用、读这个函数、这行在哪个函数里、项目结构、grep 替代、LSP 替代、token 友好的代码检索。"
-allowed-tools: Bash, Read
-summary: 替代 grep -rn 与 LSP 的代码检索：查定义、找引用、按符号读函数、查某行所属函数、看目录结构；返回结构化 JSON，token 消耗比 grep 或整文件读取低数倍
-tags: [code-search, grep, lsp, def, ref, token-efficient]
-license: MIT
+name_en: aisearch - Precise Code Search
+name_zh: aisearch 精确代码检索
+description: Precise, token-efficient code retrieval that replaces grep -rn and LSP for navigation queries. Finds where a symbol (function, class, method, type) is defined, who references it, reads a function's full implementation, shows which function a line belongs to, and lists project structure. Returns structured JSON with only the needed fragments. Use when asked to find definitions, find references, read a specific function, locate a line's context, or get a project tree without loading whole files.
+description_en: Precise, token-efficient code retrieval that replaces grep -rn and LSP for navigation queries. Finds where a symbol (function, class, method, type) is defined, who references it, reads a function's full implementation, shows which function a line belongs to, and lists project structure. Returns structured JSON with only the needed fragments. Use when asked to find definitions, find references, read a specific function, locate a line's context, or get a project tree without loading whole files.
+description_zh: 精确定位与阅读代码的检索工具，替代 grep -rn 与 LSP。查出某个符号（函数、类、方法、类型）定义在哪、谁引用了它、读取函数完整实现、查看某一行所属的函数及其上下文、掌握项目目录结构。返回结构化 JSON 且只取所需片段，token 消耗比整文件读取低数倍。触发词：查定义、找引用、读这个函数、这行在哪个函数里、项目结构、省 token 的代码检索。
+argument-hint: Name a symbol or paste a code location to search, or point at a project root to explore
+argument-hint-en: Name a symbol or paste a code location to search, or point at a project root to explore
+argument-hint-zh: 输入符号名或代码位置进行检索，或指定项目根目录进行浏览
+user-invocable: true
 ---
 
 # aisearch
 
 零依赖代码检索工具，本技能自带 Python 与 Node 两套实现（CLI 行为与 JSON 协议逐字段一致）。
 
-> **⚠️ Agent 调用铁律：一律走 rpc —— `python "${CODEBUDDY_SKILL_DIR}/scripts/aisearch_rpc.py" --root <项目根> <method> '<params>'`。**
+> **⚠️ Agent 调用铁律：一律走 rpc —— `python "<SKILL_DIR>/scripts/aisearch_rpc.py" --root <项目根> <method> '<params>'`。**
 > **禁止**用 `python -m aisearch` / `node aisearch.mjs` 这类 CLI 直调（CLI 每个请求都重付一次进程启动；rpc 单进程常驻、可批量）。
 > 默认（不带 `--tool`）就是 **Python 实现**，启动链最短、总耗时最低（实测 4.7s vs Node 6.4s）；`--tool` 切 Node 仅在无 Python 环境的机器上使用。
 > CLI 形态仅供人类在终端手动使用。
@@ -32,7 +33,7 @@ license: MIT
 **最短上手**（复制即用，把 `--root` 换成目标项目根）：
 
 ```bash
-python "${CODEBUDDY_SKILL_DIR}/scripts/aisearch_rpc.py" --root . def '{"name":"<符号名>"}'
+python "<SKILL_DIR>/scripts/aisearch_rpc.py" --root . def '{"name":"<符号名>"}'
 ```
 
 查一个符号一次调用就够；要连续查多个，用下节的 `--stdin` 批量（一次会话多请求，不重复付进程启动）。
@@ -51,23 +52,23 @@ python "${CODEBUDDY_SKILL_DIR}/scripts/aisearch_rpc.py" --root . def '{"name":"<
 
 ## 调用
 
-`<SKILL_DIR>` 是本 `SKILL.md` 所在目录（CodeBuddy 会把 `${CODEBUDDY_SKILL_DIR}` 替换成它的绝对路径）。
+`<SKILL_DIR>` 表示本 `SKILL.md` 所在目录的绝对路径；加载技能时系统会给出该技能的 Base directory，将其代入即可。
 
 ```bash
 # 单次请求：内部拉起一次 rpc 会话
-python "${CODEBUDDY_SKILL_DIR}/scripts/aisearch_rpc.py" --root <项目根> def '{"name":"apply_discount"}'
+python "<SKILL_DIR>/scripts/aisearch_rpc.py" --root <项目根> def '{"name":"apply_discount"}'
 
 # 批量：一次会话发多行请求（每行一个完整请求对象）
-python "${CODEBUDDY_SKILL_DIR}/scripts/aisearch_rpc.py" --root <项目根> --stdin < "${CODEBUDDY_SKILL_DIR}/assets/requests/basic.jsonl"
+python "<SKILL_DIR>/scripts/aisearch_rpc.py" --root <项目根> --stdin < "<SKILL_DIR>/assets/requests/basic.jsonl"
 
 # 切到 Node 实现（Windows 反斜杠路径可直接传）
-python "${CODEBUDDY_SKILL_DIR}/scripts/aisearch_rpc.py" --root <项目根> --tool "node ${CODEBUDDY_SKILL_DIR}/scripts/aisearch-js/bin/aisearch.mjs" health '{}'
+python "<SKILL_DIR>/scripts/aisearch_rpc.py" --root <项目根> --tool "node <SKILL_DIR>/scripts/aisearch-js/bin/aisearch.mjs" health '{}'
 ```
 
 PowerShell 没有 `<` 输入重定向，批量请求用管道：
 
 ```powershell
-Get-Content "${CODEBUDDY_SKILL_DIR}\assets\requests\basic.jsonl" | python "${CODEBUDDY_SKILL_DIR}\scripts\aisearch_rpc.py" --root <项目根> --stdin
+Get-Content "<SKILL_DIR>\assets\requests\basic.jsonl" | python "<SKILL_DIR>\scripts\aisearch_rpc.py" --root <项目根> --stdin
 ```
 
 - `--pretty` 缩进输出，便于阅读；默认每行一个紧凑 JSON。

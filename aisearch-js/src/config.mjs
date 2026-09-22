@@ -1,15 +1,15 @@
-/**
- * 语言检测、忽略规则、项目根查找、路径安全 —— 对齐 Python 版 config.py。
- */
+
+
+
 
 import fs from "node:fs";
 import path from "node:path";
 
-import { PyValueError } from "./util.mjs";
+import { PyValueError, abs_path } from "./util.mjs";
 
 export const VERSION = "0.1.0";
 
-// ── 默认忽略目录/文件 ──────────────────────────────
+
 export const DEFAULT_IGNORE = [
   ".git", ".svn", ".hg",
   "node_modules", "__pycache__", ".pytest_cache",
@@ -21,7 +21,7 @@ export const DEFAULT_IGNORE = [
   "vendor", "Pods", ".next", ".nuxt",
 ];
 
-// ── 扩展名 → 语言 ──────────────────────────────────
+
 export const EXT_LANG = {
   ".py": "python", ".pyi": "python",
   ".js": "javascript", ".jsx": "javascript", ".mjs": "javascript",
@@ -61,7 +61,7 @@ export const EXT_LANG = {
   ".dockerfile": "dockerfile",
 };
 
-// ── 工具函数 ────────────────────────────────────────
+
 
 export function detect_lang(p) {
   const s = String(p);
@@ -77,11 +77,15 @@ export function detect_lang(p) {
 
 
 export function should_ignore(name, ignore_list, rel_path = "") {
+
+
+  const rel_norm = rel_path ? rel_path.replace(/\\/g, "/") : "";
   for (const pat of ignore_list) {
+    const pat_norm = pat.replace(/\\/g, "/");
     if (pat.startsWith("*.")) {
       if (name.endsWith(pat.slice(1)) || name === pat.slice(2)) return true;
-    } else if (pat.includes("/")) {
-      if (rel_path && (rel_path === pat || rel_path.startsWith(pat + "/"))) return true;
+    } else if (pat_norm.includes("/")) {
+      if (rel_norm && (rel_norm === pat_norm || rel_norm.startsWith(pat_norm + "/"))) return true;
     } else if (pat === name) {
       return true;
     }
@@ -98,17 +102,17 @@ const ROOT_MARKERS = [
 ];
 
 export function find_project_root(start = ".") {
-  let cur = path.resolve(start);
+  let cur = abs_path(start);
   for (;;) {
     for (const m of ROOT_MARKERS) {
       try {
         if (fs.existsSync(path.join(cur, m))) return cur;
       } catch {
-        // exists 检查失败按不存在处理
+
       }
     }
     const parent = path.dirname(cur);
-    if (parent === cur) return path.resolve(start);
+    if (parent === cur) return abs_path(start);
     cur = parent;
   }
 }
@@ -151,32 +155,32 @@ export function is_relative_to(p, other) {
 
 
 export function safe_resolve(ref, root, boundary = "root") {
-  /**
-   * 将 ref 解析为绝对路径，并按边界策略校验。
-   *   "root"   —— 只允许 root 目录内的路径（rpc 防路径穿越）
-   *   "system" —— 允许任意路径（本地 CLI 显式指定系统路径）
-   * 拒绝包含 NUL 字节的路径。
-   */
+  
+
+
+
+
+
   const ref_str = String(ref);
   if (ref_str.includes("\x00")) {
     throw new PyValueError("Path contains NUL byte");
   }
   const full = path.isAbsolute(ref_str)
-    ? path.resolve(ref_str)
-    : path.resolve(root, ref_str);
+    ? abs_path(ref_str)
+    : abs_path(root, ref_str);
 
   if (boundary === "root") {
-    const root_resolved = path.resolve(root);
+    const root_resolved = abs_path(root);
     if (!is_relative_to(full, root_resolved)) {
       throw new PyValueError(`Path '${ref_str}' escapes project root`);
     }
   }
   return full;
 }
-// ── 编码自动探测（A：解决中文 GBK/GB18030 文档乱码）────────
+
 
 export function detect_encoding(buf) {
-  // buf: Buffer（首段字节）
+
   if (buf.length >= 3 && buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF) return "utf-8";
   if (buf.length >= 2 && buf[0] === 0xFF && buf[1] === 0xFE) return "utf-16le";
   if (buf.length >= 2 && buf[0] === 0xFE && buf[1] === 0xFF) return "utf-16be";
@@ -185,14 +189,14 @@ export function detect_encoding(buf) {
     u8.decode(buf);
     return "utf-8";
   } catch {
-    // ignore
+
   }
   const gbk = new TextDecoder("gb18030", { fatal: true });
   try {
     gbk.decode(buf);
     return "gb18030";
   } catch {
-    // ignore
+
   }
   return "utf-8";
 }
@@ -212,13 +216,13 @@ export function decode_buffer(buf) {
   try {
     return u8.decode(buf);
   } catch {
-    // ignore
+
   }
   const gbk = new TextDecoder("gb18030", { fatal: true });
   try {
     return gbk.decode(buf);
   } catch {
-    // ignore
+
   }
   return new TextDecoder("utf-8", { fatal: false }).decode(buf);
 }
@@ -240,39 +244,44 @@ export function detect_encoding_path(p, chunk = 65536) {
     try {
       fs.closeSync(fd);
     } catch {
-      // ignore
+
     }
   }
 }
 
 
 export function build_file_list(root, extensions = null, ignore = null) {
-  /** 递归遍历项目文件列表。遍历顺序对齐 Python os.walk(topdown)：
-   *  先当前目录文件（排序），再按排序后的子目录深度优先递归。 */
+  
+
   if (!ignore) ignore = DEFAULT_IGNORE;
-  const root_abs = path.resolve(root);
+  const root_abs = abs_path(root);
   const files = [];
 
-  const walk_dir = (dir) => {
+  const walk_dir = (dir, dir_rel) => {
     let dirents;
     try {
       dirents = fs.readdirSync(dir, { withFileTypes: true });
     } catch {
-      return; // 无法读取的目录静默跳过（对齐 os.walk）
+      return;
     }
     const dirnames = [];
     const filenames = [];
     for (const d of dirents) {
-      // 对齐 Python os.walk(followlinks=False)：
-      //   真实目录 → dirnames（递归）；symlink 一律按文件处理（不跟随、不递归），
-      //   防止 symlink 循环（a→b→a）导致无限递归。
-      //   readdirSync 的 isDirectory() 对 symlink 返回 false，无需 statSync。
+
+
+
+
       if (d.isDirectory()) dirnames.push(d.name);
       else filenames.push(d.name);
     }
 
+
+
     const kept_dirs = dirnames
-      .filter((dn) => !should_ignore(dn, ignore))
+      .filter((dn) => {
+        const drel = dir_rel ? `${dir_rel}/${dn}` : dn;
+        return !should_ignore(dn, ignore, drel);
+      })
       .sort();
     const sorted_files = filenames.slice().sort();
 
@@ -290,10 +299,10 @@ export function build_file_list(root, extensions = null, ignore = null) {
     }
 
     for (const dn of kept_dirs) {
-      walk_dir(path.join(dir, dn));
+      walk_dir(path.join(dir, dn), dir_rel ? `${dir_rel}/${dn}` : dn);
     }
   };
 
-  walk_dir(root_abs);
+  walk_dir(root_abs, "");
   return files;
 }

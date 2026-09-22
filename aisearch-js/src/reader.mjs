@@ -1,10 +1,10 @@
-/**
- * 智能文件阅读：按行读、按符号读、获取上下文 —— 对齐 Python 版 reader.py。
- *
- * A：编码自动探测（utf-8 → gb18030 → utf-16），中文文档不再乱码。
- * B：大文件（>5MB）按行范围流式读取，无范围时返回头部预览，不再硬拒。
- * C：JSON 正文只序列化一次；行号由 lines.{start,end} 提供（不再输出带行号副本）。
- */
+
+
+
+
+
+
+
 
 import fs from "node:fs";
 import path from "node:path";
@@ -28,28 +28,28 @@ import {
 } from "./symbols.mjs";
 import { PyValueError, py_int, splitLines } from "./util.mjs";
 
-// 单文件读取上限（字节），中小文件整文件载入；超过则走流式路径
-export const MAX_FILE_BYTES = 5 * 1024 * 1024; // 5 MB
 
-// 大文件无范围全量读取时，返回的头部预览行数
+export const MAX_FILE_BYTES = 5 * 1024 * 1024;
+
+
 const PREVIEW_LINES = 200;
 
-// 大文件按符号读取时，为推算符号范围而向前扫描的最大行数
+
 const SYMBOL_SCAN_CAP = 200_000;
 
-// 单次返回正文上限（字符）：防止超大文件 / 超长单行撑爆 AI 上下文
+
 export const MAX_CONTENT_CHARS = 200_000;
 
 
 export function _cap_content(text) {
-  /** 截断过长正文，返回 [正文, 是否被截断]。 */
+  
   if (text.length <= MAX_CONTENT_CHARS) return [text, false];
   return [text.slice(0, MAX_CONTENT_CHARS), true];
 }
 
 
 export function _is_binary(full) {
-  /** 无 BOM 且头部含 NUL 字节 → 视为二进制，避免按文本读出乱码。 */
+  
   let fd;
   try {
     fd = fs.openSync(full, "r");
@@ -62,7 +62,7 @@ export function _is_binary(full) {
     const head = buf.subarray(0, n);
     if (head.length >= 2 &&
         ((head[0] === 0xff && head[1] === 0xfe) || (head[0] === 0xfe && head[1] === 0xff))) {
-      return false; // UTF-16 BOM：属于文本
+      return false;
     }
     return head.includes(0);
   } catch {
@@ -71,21 +71,21 @@ export function _is_binary(full) {
     try {
       fs.closeSync(fd);
     } catch {
-      // ignore
+
     }
   }
 }
 
 
-// ── 结果对象 to_dict ────────────────────────────────
+
 
 export function read_result_to_dict(r) {
   if (!r.ok) return { ok: false, error: r.error };
-  // 正文上限：超大文件 / 超长单行在此截断并标记 truncated
+
   const [content, capped] = _cap_content(r.content ?? "");
   let end = r.end;
   if (capped && r.start) {
-    // lines.end 需反映实际返回范围，而不是仍报整文件
+
     const kept = (content.match(/\n/g) || []).length + 1;
     end = Math.min(end, r.start + kept - 1);
   }
@@ -100,19 +100,19 @@ export function read_result_to_dict(r) {
   };
   if (r.language) d.data.language = r.language;
   if (r.symbol) d.data.symbol = r.symbol;
-  // 整文件大纲仅在 human（文本渲染）时才有值；AI/rpc 侧为空，自然不输出。
+
   if (r.symbols.length) d.data.symbols = r.symbols;
   if (r.truncated || capped) d.data.truncated = true;
-  // 正文只序列化一次：content 纯文本 + lines.{start,end} 提供行号，
-  // 避免重复输出带行号副本导致 ~2x token 浪费（与 Python 版对齐）。
+
+
   return d;
 }
 
 export function context_result_to_dict(r) {
   if (!r.ok) return { ok: false, error: r.error };
   const [content, capped] = _cap_content(r.content ?? "");
-  // 字段顺序刻意安排：metadata（file/line/language/containing_symbol...）在前，
-  // 大体积的 content 放最后——避免 Agent 只解析 JSON 前段就误判「没有 containing_symbol」。
+
+
   const d = {
     ok: true,
     data: {
@@ -131,8 +131,8 @@ export function context_result_to_dict(r) {
   return d;
 }
 
-// File not found 的可行动提示：file 里重复带了 root 最后一级目录名（如
-// --root=.../my-project/src 却传 src/app.py，双写 src/）是高频误用
+
+
 function file_nf_error(root, full) {
   let msg = `File not found: ${full}`;
   try {
@@ -144,7 +144,7 @@ function file_nf_error(root, full) {
         msg += ` (looks double-prefixed with the root's last segment '${parts[0]}/'; try file "${parts.slice(1).join('/')}")`;
       }
     }
-  } catch { /* hint 尽力而为 */ }
+  } catch {  }
   return msg;
 }
 
@@ -165,10 +165,10 @@ function fail_ctx(error, extra = {}) {
 }
 
 
-// ── 大文件流式读取辅助（B）──────────────────────────
+
 
 function* iter_lines_sync(p, encoding) {
-  /** 按行同步流式产出（不含行终止符），避免整文件载入内存。 */
+  
   const fd = fs.openSync(p, "r");
   try {
     const CHUNK = 1 << 20;
@@ -197,7 +197,7 @@ function* iter_lines_sync(p, encoding) {
     try {
       fs.closeSync(fd);
     } catch {
-      // ignore
+
     }
   }
 }
@@ -255,18 +255,18 @@ function scan_decls_stream(p, encoding, lang) {
 }
 
 
-// ── 解析文件路径引用 ─────────────────────────────────
+
 
 export function _resolve_path(file_ref, root, boundary = "root") {
-  /**
-   * 解析多种文件引用格式：
-   *   path/to/file.py
-   *   path/to/file.py:10-50
-   *   path/to/file.py:42
-   *   path/to/file.py#symbol_name
-   * 若整个引用本身就是一个存在的文件（文件名含 # 或 : 的场景），直接按普通路径处理。
-   */
-  // 先尝试整体作为一个路径（兼容文件名中含 # 或 : 的情况）
+  
+
+
+
+
+
+
+
+
   try {
     const as_whole = safe_resolve(file_ref, root, boundary);
     try {
@@ -274,10 +274,10 @@ export function _resolve_path(file_ref, root, boundary = "root") {
         return [as_whole, null, null, null];
       }
     } catch {
-      // stat 失败 → 继续拆分解析
+
     }
   } catch {
-    // 越界/NUL → 继续拆分解析（最后统一 safe_resolve 校验）
+
   }
 
   let path_part = file_ref;
@@ -296,7 +296,7 @@ export function _resolve_path(file_ref, root, boundary = "root") {
 
   if (path_part.includes(":")) {
     const i = path_part.lastIndexOf(":");
-    // 跳过 Windows 盘符 C:（索引 1 处、后跟分隔符的冒号），不能当作行号分隔符
+
     const is_drive =
       i === 1 &&
       /[a-zA-Z]/.test(path_part[0]) &&
@@ -427,11 +427,11 @@ function read_symbol_large(full, rel, lang, symbol_name, encoding, human = false
 
 
 export function read_file(file_ref, path_arg = ".", outline_only = false, boundary = "root", human = false) {
-  /**
-   * 读取文件，支持多种引用格式。
-   * outline_only=true 时只返回符号大纲，不返回内容。
-   * boundary="root" 时限制在项目根目录内；"system" 允许任意路径。
-   */
+  
+
+
+
+
   const root = find_project_root(path_arg);
   let full, start_line, end_line, symbol_name;
   try {
@@ -454,14 +454,14 @@ export function read_file(file_ref, path_arg = ".", outline_only = false, bounda
   const lang = detect_lang(full);
   const large = st.size > MAX_FILE_BYTES;
 
-  // 二进制文件：按文本读只会产出乱码，直接结构化拒绝
+
   if (_is_binary(full)) {
     return fail_read(`Binary file (${st.size} bytes); not text`, {
       file: rel, language: lang,
     });
   }
 
-  // ── 符号模式 ──
+
   if (symbol_name) {
     if (large) {
       const enc = detect_encoding_path(full);
@@ -477,7 +477,7 @@ export function read_file(file_ref, path_arg = ".", outline_only = false, bounda
     return read_symbol_from_lines(lines, rel, lang, symbol_name, lines.length, human);
   }
 
-  // ── 大纲模式 ──
+
   if (outline_only) {
     if (large) {
       const enc = detect_encoding_path(full);
@@ -508,7 +508,7 @@ export function read_file(file_ref, path_arg = ".", outline_only = false, bounda
     };
   }
 
-  // ── 行范围非法检查 ──
+
   if (start_line && end_line && start_line > end_line) {
     const r = fail_read(`Invalid line range: ${start_line} > ${end_line}`);
     r.file = rel;
@@ -516,7 +516,7 @@ export function read_file(file_ref, path_arg = ".", outline_only = false, bounda
     return r;
   }
 
-  // ── 大文件：按范围流式读；无范围则头部预览 ──
+
   if (large) {
     const enc = detect_encoding_path(full);
     const total = stream_count_lines(full, enc);
@@ -540,7 +540,7 @@ export function read_file(file_ref, path_arg = ".", outline_only = false, bounda
     };
   }
 
-  // ── 中小文件：整体载入（编码自动探测）──
+
   let text;
   try {
     text = decode_buffer(fs.readFileSync(full));
@@ -574,14 +574,14 @@ export function read_file(file_ref, path_arg = ".", outline_only = false, bounda
 }
 
 
-// ── 获取上下文 ──────────────────────────────────────
+
 
 export function get_context(file_ref, line, path_arg = ".", radius = 5, boundary = "root", human = false) {
-  /** 获取某一行的丰富上下文。 */
+  
   const root = find_project_root(path_arg);
 
-  // 复用统一解析（兼容 file:line、file#symbol 及文件名含特殊字符的情况），
-  // 行号以显式参数为准
+
+
   let full;
   try {
     [full] = _resolve_path(file_ref, root, boundary);
@@ -599,7 +599,7 @@ export function get_context(file_ref, line, path_arg = ".", radius = 5, boundary
     return fail_ctx(`Not a file: ${full}`);
   }
 
-  // 上下文半径上限，防止超大范围读取
+
   const r_parsed = py_int(radius);
   if (r_parsed === null) {
     throw new PyValueError(`invalid literal for int() with base 10: '${radius}'`);
@@ -610,14 +610,14 @@ export function get_context(file_ref, line, path_arg = ".", radius = 5, boundary
   const lang = detect_lang(full);
   const large = st.size > MAX_FILE_BYTES;
 
-  // 二进制文件：按文本读只会产出乱码，直接结构化拒绝
+
   if (_is_binary(full)) {
     return fail_ctx(`Binary file (${st.size} bytes); not text`, {
       file: rel, language: lang, line,
     });
   }
 
-  // ── 大文件：只流式读取窗口，避免整文件载入 ──
+
   if (large) {
     const enc = detect_encoding_path(full);
     const total = stream_count_lines(full, enc);
@@ -634,7 +634,7 @@ export function get_context(file_ref, line, path_arg = ".", radius = 5, boundary
     };
   }
 
-  // ── 中小文件 ──
+
   let text;
   try {
     text = decode_buffer(fs.readFileSync(full));
@@ -648,24 +648,24 @@ export function get_context(file_ref, line, path_arg = ".", radius = 5, boundary
     return fail_ctx(`Line ${line} out of range (1-${total})`);
   }
 
-  // 包含的符号
+
   let containing_sym = null;
   if (lang) {
     const sym = find_containing_symbol(lines, lang, line);
     if (sym) containing_sym = symbol_to_dict(sym);
   }
 
-  // imports
+
   const imports = lang ? extract_imports(lines, lang) : [];
 
-  // 文件大纲（人类/文本渲染专属；AI（rpc）不需要，省 token）
+
   let outline = [];
   if (lang && human) {
     const syms = extract_symbols(lines, lang, rel);
     outline = syms.map(symbol_to_dict);
   }
 
-  // 上下文窗口
+
   const ctx_start = Math.max(0, line - 1 - radius);
   const ctx_end = Math.min(total, line + radius);
   const ctx_content = lines.slice(ctx_start, ctx_end).join("\n");

@@ -25,13 +25,13 @@ from .symbols import (
     iter_symbol_decls,
 )
 
-# 单文件读取上限（字节），中小文件整文件载入；超过则走流式路径
-MAX_FILE_BYTES = 5 * 1024 * 1024  # 5 MB
 
-# 大文件无范围全量读取时，返回的头部预览行数
+MAX_FILE_BYTES = 5 * 1024 * 1024
+
+
 PREVIEW_LINES = 200
 
-# 大文件按符号读取时，为推算符号范围而向前扫描的最大行数
+
 SYMBOL_SCAN_CAP = 200_000
 
 
@@ -52,7 +52,7 @@ def _file_nf_error(root: Path, full: Path) -> str:
         pass
     return msg
 
-# 单次返回正文上限（字符）：防止超大文件 / 超长单行撑爆 AI 上下文
+
 MAX_CONTENT_CHARS = 200_000
 
 
@@ -70,7 +70,7 @@ def _is_binary(full: Path) -> bool:
             head = f.read(8192)
     except OSError:
         return False
-    if head.startswith((b"\xff\xfe", b"\xfe\xff")):  # UTF-16 BOM：属于文本
+    if head.startswith((b"\xff\xfe", b"\xfe\xff")):
         return False
     return b"\x00" in head
 
@@ -110,11 +110,11 @@ class ReadResult:
     error: str = ""
 
     def __post_init__(self):
-        # 正文上限：超大文件或超长单行在此截断并标记 truncated
+
         self.content, capped = _cap_content(self.content)
         if capped:
             self.truncated = True
-            # lines.end 需反映实际返回范围，而不是仍报整文件
+
             kept = self.content.count("\n") + 1
             if self.start:
                 self.end = min(self.end, self.start + kept - 1)
@@ -135,14 +135,14 @@ class ReadResult:
             d["data"]["language"] = self.language
         if self.symbol:
             d["data"]["symbol"] = self.symbol
-        # 整文件大纲仅在 human（文本渲染）时才有值：定向读取时 AI 侧为空，
-        # 自然不输出；大纲模式/歧义候选仍会带（供人与 AI 明确索取）。
+
+
         if self.symbols:
             d["data"]["symbols"] = self.symbols
         if self.truncated:
             d["data"]["truncated"] = True
-        # 正文只序列化一次：content 为纯文本，行号由 lines.start/end 提供，
-        # 避免再输出一份带行号的副本造成 ~2x token 浪费（实测发现）。
+
+
         return d
 
 
@@ -169,8 +169,8 @@ class ContextResult:
     def to_dict(self) -> dict:
         if not self.ok:
             return {"ok": False, "error": self.error}
-        # 字段顺序刻意安排：metadata（file/line/language/containing_symbol...）在前，
-        # 大体积的 content 放最后——避免 Agent 只解析 JSON 前段就误判「没有 containing_symbol」。
+
+
         d: dict = {
             "ok": True,
             "data": {
@@ -196,7 +196,7 @@ class ContextResult:
         return d
 
 
-# ── 大文件流式读取辅助 ──────────────────────────────
+
 
 def _iter_lines(path: Path, encoding: str) -> Iterator[str]:
     """按行流式产出（不含行终止符），避免整文件载入内存。"""
@@ -263,7 +263,7 @@ def _scan_decls_stream(path: Path, encoding: str, lang: Optional[str]) -> list[S
     return iter_symbol_decls(gen(), lang)
 
 
-# ── 解析文件路径引用 ─────────────────────────────────
+
 
 def _resolve_path(
     file_ref: str,
@@ -279,7 +279,7 @@ def _resolve_path(
 
     若整个引用本身就是一个存在的文件（文件名含 # 或 : 的场景），直接按普通路径处理。
     """
-    # 先尝试整体作为一个路径（兼容文件名中含 # 或 : 的情况）
+
     try:
         as_whole = safe_resolve(file_ref, root, boundary=boundary)
         if as_whole.is_file():
@@ -298,8 +298,8 @@ def _resolve_path(
             raise ValueError(f"Empty symbol name after '#' in file reference: {file_ref}")
 
     if ":" in path_part:
-        # 注意 Windows 盘符 C:\ 形如 "C:" 的冒号不能当作行号分隔符；
-        # 只在非盘符的最后一个冒号处切分（盘符冒号位于索引 1 且后跟分隔符）。
+
+
         ci = path_part.rfind(":")
         if ci == 1 and path_part[0].isalpha() and (
             len(path_part) < 3 or path_part[2] in ("\\", "/")
@@ -435,8 +435,8 @@ def read_file(
     except ValueError as e:
         return ReadResult(ok=False, error=str(e))
 
-    # stat 统一探测：防御超长文件名/权限/符号链接环等 OSError（Errno 36 等），
-    # 避免裸 .exists()/.is_file()/.stat() 抛异常导致 CLI traceback
+
+
     try:
         st = full.stat()
     except FileNotFoundError:
@@ -450,14 +450,14 @@ def read_file(
     lang = detect_lang(full)
     large = st.st_size > MAX_FILE_BYTES
 
-    # 二进制文件：按文本读只会产出乱码，直接结构化拒绝
+
     if _is_binary(full):
         return ReadResult(
             ok=False, file=rel, language=lang, total_lines=0,
             error=f"Binary file ({st.st_size} bytes); not text",
         )
 
-    # ── 符号模式 ──
+
     if symbol_name:
         if large:
             enc = detect_encoding(full)
@@ -467,7 +467,7 @@ def read_file(
         total = len(lines)
         return _read_symbol_from_lines(lines, rel, lang, symbol_name, total, human=human)
 
-    # ── 大纲模式 ──
+
     if outline_only:
         if large:
             enc = detect_encoding(full)
@@ -487,14 +487,14 @@ def read_file(
             content="", symbols=[x.to_dict() for x in syms],
         )
 
-    # ── 行范围非法检查 ──
+
     if start_line and end_line and start_line > end_line:
         return ReadResult(
             ok=False, file=rel, language=lang,
             error=f"Invalid line range: {start_line} > {end_line}",
         )
 
-    # ── 大文件：按范围流式读；无范围则头部预览 ──
+
     if large:
         enc = detect_encoding(full)
         total = _stream_count_lines(full, enc)
@@ -515,7 +515,7 @@ def read_file(
             content=content, truncated=truncated,
         )
 
-    # ── 中小文件：整体载入（编码自动探测）──
+
     try:
         text = read_text_auto(full)
     except (OSError, PermissionError) as e:
@@ -543,7 +543,7 @@ def read_file(
     )
 
 
-# ── 获取上下文 ──────────────────────────────────────
+
 
 def get_context(
     file_ref: str,
@@ -559,14 +559,14 @@ def get_context(
     """
     root = find_project_root(path)
 
-    # 复用统一解析（兼容 file:line、file#symbol 及文件名含特殊字符的情况），
-    # 行号以显式参数为准
+
+
     try:
         full, _s, _e, _sym = _resolve_path(file_ref, root, boundary=boundary)
     except ValueError as e:
         return ContextResult(ok=False, error=str(e))
 
-    # stat 统一探测（同 read_file：防御 OSError）
+
     try:
         st = full.stat()
     except FileNotFoundError:
@@ -576,21 +576,21 @@ def get_context(
     if not _stat_mod.S_ISREG(st.st_mode):
         return ContextResult(ok=False, error=f"Not a file: {full}")
 
-    # 上下文半径上限，防止超大范围读取
+
     radius = max(0, min(int(radius), 200))
 
     rel = _rel(root, full)
     lang = detect_lang(full)
     large = st.st_size > MAX_FILE_BYTES
 
-    # 二进制文件：按文本读只会产出乱码，直接结构化拒绝
+
     if _is_binary(full):
         return ContextResult(
             ok=False, file=rel, language=lang, line=line,
             error=f"Binary file ({st.st_size} bytes); not text",
         )
 
-    # ── 大文件：只流式读取窗口，避免整文件载入 ──
+
     if large:
         enc = detect_encoding(full)
         total = _stream_count_lines(full, enc)
@@ -604,7 +604,7 @@ def get_context(
             total_lines=total, window_start=window_start,
         )
 
-    # ── 中小文件 ──
+
     try:
         text = read_text_auto(full)
     except (OSError, PermissionError) as e:
@@ -615,23 +615,23 @@ def get_context(
     if line < 1 or line > total:
         return ContextResult(ok=False, error=f"Line {line} out of range (1-{total})")
 
-    # 包含的符号
+
     containing_sym = None
     if lang:
         sym = find_containing_symbol(lines, lang, line)
         if sym:
             containing_sym = sym.to_dict()
 
-    # imports
+
     imports = extract_imports(lines, lang) if lang else []
 
-    # 文件大纲（人类/文本渲染专属；AI（rpc）不需要，省 token）
+
     outline = []
     if lang and human:
         syms = extract_symbols(lines, lang, rel)
         outline = [s.to_dict() for s in syms]
 
-    # 上下文窗口
+
     ctx_start = max(0, line - 1 - radius)
     ctx_end = min(total, line + radius)
     ctx_content = "\n".join(lines[ctx_start:ctx_end])

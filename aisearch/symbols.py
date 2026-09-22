@@ -11,21 +11,21 @@ from typing import Optional
 
 from .config import detect_lang
 
-# 单文件符号数上限：防御病态文件（如一行一个 def）导致
-# extract_symbols O(S) 与 _calc_ranges O(S×N) 的组合爆炸
+
+
 MAX_SYMBOLS_PER_FILE = 5000
 
-# ── 数据结构 ────────────────────────────────────────
+
 
 @dataclass
 class Symbol:
-    kind: str           # class / function / method / struct / trait / import ...
+    kind: str
     name: str
-    line: int           # 1-based
-    line_end: int = 0   # 1-based, 0 = 未知
+    line: int
+    line_end: int = 0
     col: int = 0
     indent: int = 0
-    parent: str = ""    # 所属类/命名空间
+    parent: str = ""
 
     def to_dict(self) -> dict:
         d: dict = {"kind": self.kind, "name": self.name, "line": self.line}
@@ -36,8 +36,8 @@ class Symbol:
         return d
 
 
-# ── 每种语言的符号正则 ──────────────────────────────
-# (kind, regex_pattern, want_group=1)
+
+
 _LangPatterns = list[tuple[str, str, int]]
 
 PYTHON_PATTERNS: _LangPatterns = [
@@ -45,7 +45,7 @@ PYTHON_PATTERNS: _LangPatterns = [
     ("function",  r"^(\s*)(?:async\s+)?def\s+(\w+)", 2),
 ]
 
-# 关键字黑名单，避免把 if (x) {}、for (...) {} 等误判为方法
+
 _JS_KW = r"get|set|if|for|while|switch|catch|return|typeof|new|do|else|await|class|function|with|try|finally|throw|delete|yield|using|lock"
 
 JAVASCRIPT_PATTERNS: _LangPatterns = [
@@ -53,15 +53,15 @@ JAVASCRIPT_PATTERNS: _LangPatterns = [
     ("function", r"^(\s*)(?:export\s+(?:default\s+)?)?(?:async\s+)?function\s+(\w+)", 2),
     ("function", r"^(\s*)(?:export\s+)?(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?\(", 2),
     ("function", r"^(\s*)(?:export\s+)?(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?(?:\([^)]*\)|\w+)\s*=>", 2),
-    # 类方法简写：handle_request() { ... } 或 foo(): number { ... }
-    # 关键字后加 \b，避免误伤 forEach / instanceof 等以关键字开头的标识符
+
+
     ("method",   r"^(\s*)(?:async\s+)?(?!(?:" + _JS_KW + r")\b)(\w+)\s*\([^)]*\)\s*[\{:]", 2),
 ]
 
 TYPESCRIPT_EXTRA: _LangPatterns = [
     ("interface", r"^(\s*)(?:export\s+)?interface\s+(\w+)", 2),
-    # type 别名后面必然跟 `=` / 泛型 `<` / 对象字面量 `{`；
-    # 不加这个锚定会把多行 `import type {\n  type Tool,}` 块里的列表项当成定义
+
+
     ("type",      r"^(\s*)(?:export\s+)?type\s+(\w+)\s*[=<{]", 2),
     ("enum",      r"^(\s*)(?:export\s+)?(?:const\s+)?enum\s+(\w+)", 2),
 ]
@@ -78,9 +78,9 @@ RUST_PATTERNS: _LangPatterns = [
     ("struct",    r"^(\s*)(?:pub\s+)?struct\s+(\w+)", 2),
     ("enum",      r"^(\s*)(?:pub\s+)?enum\s+(\w+)", 2),
     ("trait",     r"^(\s*)(?:pub\s+)?trait\s+(\w+)", 2),
-    # 以 `{` / `where` / 行尾锚定，取 impl 的最后一个标识符：
-    # `impl Config` → Config，`impl fmt::Display for Config` → Config
-    # （旧写法靠回溯，会把名字截成最后一个字母：Config → "g"）
+
+
+
     ("impl",      r"^(\s*)impl(?:\s*<[^>]*>)?\s+(?:.*?\sfor\s+)?(\w+)\s*(?:<[^>]*>)?\s*(?:\{|where|$)", 2),
     ("type",      r"^(\s*)(?:pub\s+)?type\s+(\w+)", 2),
     ("macro",     r"^(\s*)(?:pub\s+)?macro_rules!\s+(\w+)", 2),
@@ -132,7 +132,7 @@ LANG_PATTERNS: dict[str, _LangPatterns] = {
     "php": PHP_PATTERNS,
     "c": C_PATTERNS,
     "cpp": CPP_EXTRA,
-    "csharp": JAVA_PATTERNS,  # C# 与 Java 模式接近
+    "csharp": JAVA_PATTERNS,
     "shell": SHELL_PATTERNS,
     "lua": [("function", r"^(\s*)(?:local\s+)?function\s+(\w+)", 2)],
     "swift": [
@@ -153,7 +153,7 @@ LANG_PATTERNS: dict[str, _LangPatterns] = {
 }
 
 
-# ── 编译正则 ────────────────────────────────────────
+
 
 @dataclass
 class _CompiledPattern:
@@ -174,7 +174,7 @@ def _get_compiled(lang: str) -> list[_CompiledPattern]:
     return compiled
 
 
-# ── 公开 API ────────────────────────────────────────
+
 
 def extract_symbols(
     lines: list[str],
@@ -191,13 +191,13 @@ def extract_symbols(
 
     for idx, line in enumerate(lines):
         if len(symbols) >= MAX_SYMBOLS_PER_FILE:
-            break  # 符号数超限：截断（鲁棒性优先，防 DoS）
+            break
         lineno = idx + 1
         stripped = line.rstrip()
         if not stripped:
             continue
         ls = stripped.lstrip()
-        # 跳过注释行（按语言粗略判断）
+
         if ls.startswith("#") or ls.startswith("//") or ls.startswith("--"):
             continue
 
@@ -217,16 +217,16 @@ def extract_symbols(
                     indent=indent,
                 )
 
-                # 更新 parent 上下文
+
                 if cp.kind in ("class", "struct", "interface", "trait", "enum", "module", "namespace", "object"):
                     current_class = name
                 elif indent > 0 and current_class:
                     sym.parent = current_class
 
                 symbols.append(sym)
-                break  # 一行只匹配一个符号
+                break
 
-    # 计算每个符号的范围（行结束位置）
+
     _calc_ranges(symbols, lines, lang)
 
     return symbols
@@ -289,32 +289,77 @@ def _calc_ranges(symbols: list[Symbol], lines: list[str], lang: str):
     }
     n = len(lines)
 
-    for sym in symbols:
-        if lang in brace_langs:
-            # 花括号计数：必须扫到配平或文件尾。
-            # 不能用"下一个符号行号"截断扫描窗口——类/命名空间的结束括号
-            # 远在其首个嵌套成员之后，截断会把类范围错算成声明行。
-            brace_count = 0
-            started = False
-            end = sym.line - 1
-            for j in range(sym.line - 1, n):
-                for ch in lines[j]:
-                    if ch == '{':
-                        brace_count += 1
-                        started = True
-                    elif ch == '}':
-                        brace_count -= 1
-                if started and brace_count <= 0:
-                    end = j + 1
-                    break
+    if lang in brace_langs:
+
+
+
+
+
+        delta = [0] * n
+        opens = [False] * n
+        for j in range(n):
+            line = lines[j]
+            d = 0
+            has = False
+            for ch in line:
+                if ch == '{':
+                    d += 1
+                    has = True
+                elif ch == '}':
+                    d -= 1
+            delta[j] = d
+            opens[j] = has
+        depth = [0] * (n + 1)
+        for j in range(n):
+            depth[j + 1] = depth[j] + delta[j]
+
+        next_open = [n] * (n + 1)
+        for j in range(n - 1, -1, -1):
+            next_open[j] = j if opens[j] else next_open[j + 1]
+
+
+
+
+
+
+
+        activate_at: dict[int, list[tuple[int, int]]] = {}
+        activated: set[int] = set()
+        for idx, sym in enumerate(symbols):
+            start0 = sym.line - 1
+            act = next_open[start0]
+            if act < n:
+                activate_at.setdefault(act, []).append((idx, depth[start0]))
+                activated.add(idx)
+
+        end_of: dict[int, int] = {}
+        active: dict[int, list[int]] = {}
+        max_base: Optional[int] = None
+        for j in range(n):
+            for idx, b in activate_at.get(j, ()):
+                active.setdefault(b, []).append(idx)
+                if max_base is None or b > max_base:
+                    max_base = b
+            d_after = depth[j + 1]
+
+            while max_base is not None and max_base >= d_after:
+                for idx in active.pop(max_base, ()):
+                    end_of[idx] = j + 1
+                max_base = max(active) if active else None
+
+        for idx, sym in enumerate(symbols):
+            if idx in end_of:
+                e = end_of[idx]
+            elif idx in activated:
+                e = n
             else:
-                if started:
-                    end = n  # 未配平（畸形文件）：保守取到文件尾
-            sym.line_end = max(end, sym.line)
-        else:
-            # 缩进语言（Python 等）：先跳过多行签名——
-            # 签名收尾行 `) -> X:` 的缩进等于 base，会提前终止缩进扫描，
-            # 因此从头按括号配平找到 "行尾冒号" 才算签名结束。
+                e = sym.line - 1
+            sym.line_end = max(e, sym.line)
+    else:
+        for sym in symbols:
+
+
+
             base_indent = sym.indent
             j0 = sym.line - 1
             header_end = j0
@@ -340,7 +385,7 @@ def _calc_ranges(symbols: list[Symbol], lines: list[str], lang: str):
                     end = j + 1
                 else:
                     break
-            # 去掉尾部空行，避免 #symbol 读取带出多余空行
+
             while end > sym.line and lines[end - 1].strip() == "":
                 end -= 1
             sym.line_end = max(end, sym.line)
@@ -386,11 +431,11 @@ def extract_imports(lines: list[str], lang: str) -> list[str]:
     """提取 import 语句。"""
     imports: list[str] = []
 
-    # Go 的标准 import 块是多行的，需要专门处理：
-    #   import (
-    #       "fmt"
-    #       x "os"
-    #   )
+
+
+
+
+
     if lang == "go":
         in_block = False
         for line in lines:

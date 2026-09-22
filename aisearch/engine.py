@@ -26,7 +26,7 @@ from .config import (
 )
 from .symbols import Symbol, extract_symbols, find_containing_symbol
 
-# ── 数据结构 ────────────────────────────────────────
+
 
 @dataclass
 class Match:
@@ -77,17 +77,17 @@ class SearchResponse:
         }
 
 
-# ── 参数归一化 / 防护 ──────────────────────────────
 
-MAX_RESULTS_CAP = 5000      # 单次查询结果上限，防止 DoS
-MAX_TREE_DEPTH = 16         # 目录树深度上限，防止递归爆炸
-MAX_CONTEXT_LINES = 200     # 上下文行数上限
-MAX_PATTERN_LEN = 256       # 搜索模式长度上限：缓解 ReDoS 回溯爆炸
-                            # 与超长模式拖慢 rg（rg 路径同样受益）
 
-# 嵌套量词（(a+)+ 、(a*)* 、(a+){2,} 等）会让回溯引擎指数级爆炸——单个
-# search() 即可挂死进程，长度上限挡不住。rg 是线性引擎不受影响，故仅在
-# Python 正则回退路径拒绝这类模式。
+MAX_RESULTS_CAP = 5000
+MAX_TREE_DEPTH = 16
+MAX_CONTEXT_LINES = 200
+MAX_PATTERN_LEN = 256
+
+
+
+
+
 _REDOS_RE = re.compile(r"\([^()]*[*+][^()]*\)\s*(?:[*+]|\{\d+,\})")
 
 
@@ -100,14 +100,14 @@ def _safe_int(value, default: int, lo: int, hi: int) -> int:
     return max(lo, min(hi, n))
 
 
-# ── ripgrep 检测 ────────────────────────────────────
+
 
 _has_rg: Optional[bool] = None
 
 def has_ripgrep() -> bool:
     global _has_rg
     if _has_rg is None:
-        # AISEARCH_NO_RG=1 强制走纯实现（基准测试 / 调试用）
+
         if os.environ.get("AISEARCH_NO_RG"):
             _has_rg = False
             return _has_rg
@@ -122,7 +122,7 @@ def has_ripgrep() -> bool:
     return _has_rg
 
 
-# ── ripgrep JSON 解析 ───────────────────────────────
+
 
 def _search_with_rg(
     pattern: str,
@@ -134,12 +134,13 @@ def _search_with_rg(
     case_insensitive: bool,
     max_results: int,
     whole_word: bool,
+    literal: bool = False,
 ) -> SearchResponse:
     t0 = time.monotonic()
     cmd = [
         "rg", "--json",
         "-C", str(context_lines),
-        "--max-count", str(max(1, max_results * 3)),  # 多取一些，后面截断
+        "--max-count", str(max(1, max_results * 3)),
     ]
     if case_insensitive:
         cmd.append("-i")
@@ -149,25 +150,27 @@ def _search_with_rg(
         for ext in extensions:
             cmd.extend(["-g", f"*{ext}"])
 
-    # 添加 ignore 目录
+
     for ig in ignore:
         cmd.extend(["--glob", f"!{ig}"])
 
-    # -e 显式传模式：防止以 "-" 开头的 pattern 被解析为 rg flag（参数注入）
-    cmd.extend(["-e", pattern])
-    # 搜索范围：scope（文件/子目录）以 root 为基准传入；否则整个 root（"."）
+
+
+
+    cmd.extend(["-e", re.escape(pattern) if literal else pattern])
+
     cmd.append("." if scope is None else _rel_to(root, scope))
 
     try:
         proc = subprocess.run(
             cmd, capture_output=True, text=True, timeout=30,
-            cwd=str(root),  # 关键：在 root 内搜索，glob 与输出路径都以 root 为基准，
-                            # 与调用方 cwd 无关（可移植性）
+            cwd=str(root),
+
         )
     except subprocess.TimeoutExpired:
         return SearchResponse(ok=False, error="Search timed out (30s)")
 
-    # ripgrep 非 0 退出通常表示正则无效或严重错误
+
     if proc.returncode not in (0, 1):
         err = proc.stderr.strip().splitlines()
         msg = err[-1] if err else f"ripgrep exited with {proc.returncode}"
@@ -176,8 +179,24 @@ def _search_with_rg(
     matches: list[Match] = []
     files_searched: set[str] = set()
     current_file = ""
-    context_buf: list[str] = []
-    in_context_before = True
+    file_matches: list[Match] = []
+    ctx_lines: dict[int, str] = {}
+
+    def _attach_context() -> None:
+        """按**行号窗口**给本文件的 match 回填 context。
+
+        修复旧实现按"消息顺序 + 布尔标志"归属的缺陷：in_context_before 只在
+        begin/end 复位，于是同文件第 2 个 match 的 context_before 恒为空，
+        而它的前文被错挂到上一个 match 的 context_after（多命中文件必现）。
+        rg 的 context 消息自带 line_number，按 [line-k, line-1] / [line+1, line+k]
+        取窗口才是正确归属，且天然覆盖"相邻 match 的窗口重叠"。
+        """
+        if context_lines > 0:
+            for m in file_matches:
+                m.context_before = [ctx_lines[k] for k in range(max(1, m.line - context_lines), m.line) if k in ctx_lines]
+                m.context_after = [ctx_lines[k] for k in range(m.line + 1, m.line + 1 + context_lines) if k in ctx_lines]
+        file_matches.clear()
+        ctx_lines.clear()
 
     for line_text in proc.stdout.splitlines():
         if not line_text:
@@ -191,17 +210,18 @@ def _search_with_rg(
         data = msg.get("data", {})
 
         if msg_type == "begin":
+
+            _attach_context()
             current_file = data.get("path", {}).get("text", "")
             files_searched.add(current_file)
-            context_buf = []
-            in_context_before = True
 
         elif msg_type == "match":
             path_text = data.get("path", {}).get("text", "")
             line_num = data.get("line_number", 0)
             line_content = data.get("lines", {}).get("text", "").rstrip("\n")
             subs = data.get("submatches", [])
-            col = subs[0]["start"] if subs else 0
+
+            col = _byte_offset_to_col(line_content, subs[0]["start"]) if subs else 0
 
             rel_path = _rel_path(path_text, root)
 
@@ -210,27 +230,22 @@ def _search_with_rg(
                 line=line_num,
                 col=col,
                 text=line_content,
-                context_before=list(context_buf),
+                context_before=[],
             )
             matches.append(m)
-            context_buf = []
-            in_context_before = False
+            file_matches.append(m)
 
         elif msg_type == "context":
-            ctx_line = data.get("lines", {}).get("text", "").rstrip("\n")
-            if in_context_before:
-                context_buf.append(ctx_line)
-                if len(context_buf) > context_lines:
-                    context_buf.pop(0)
-            else:
-                if matches and len(matches[-1].context_after) < context_lines:
-                    matches[-1].context_after.append(ctx_line)
+
+            ctx_lines[data.get("line_number", 0)] = data.get("lines", {}).get("text", "").rstrip("\n")
 
         elif msg_type == "end":
-            in_context_before = True
-            context_buf = []
+            _attach_context()
 
-    # 截断
+
+    _attach_context()
+
+
     matches = matches[:max_results]
 
     elapsed = (time.monotonic() - t0) * 1000
@@ -242,8 +257,25 @@ def _search_with_rg(
     )
 
 
+def _byte_offset_to_col(text: str, byte_off: int) -> int:
+    """rg 的 `submatches[].start` 是**字节**偏移；对外统一用**码点**列号。
+
+    三条路径（rg / 回退引擎 / Node 回退）若各自沿用原生口径，同一行含中文或 emoji
+    时列号就会不同（服务器语料实测：含 `🧹` 的行 Python 21 vs Node 22）。
+    码点是 Python 回退引擎（`m.start()`）的天然口径，故以它为基准。
+    """
+    if byte_off <= 0:
+        return 0
+    acc = 0
+    for i, ch in enumerate(text):
+        if acc >= byte_off:
+            return i
+        acc += len(ch.encode("utf-8"))
+    return len(text)
+
+
 def _rel_path(full: str, root: Path) -> str:
-    # cwd=root 模式下 rg 返回相对路径，去掉可能存在的 "./" 前缀
+
     p = full[2:] if full.startswith("./") else full
     try:
         return str(Path(p).relative_to(root))
@@ -287,7 +319,7 @@ def _resolve_scope(path: str, root: Path) -> Optional[Path]:
     return None
 
 
-# ── Python regex 回退 ───────────────────────────────
+
 
 def _search_with_regex(
     pattern: str,
@@ -299,6 +331,7 @@ def _search_with_regex(
     case_insensitive: bool,
     max_results: int,
     whole_word: bool,
+    literal: bool = False,
 ) -> SearchResponse:
     t0 = time.monotonic()
 
@@ -312,14 +345,20 @@ def _search_with_regex(
         )
 
     try:
+
+
+
+
+
+        src = re.escape(pattern) if literal else pattern
         if whole_word:
-            pat = re.compile(rf"\b{re.escape(pattern)}\b", flags)
+            pat = re.compile(rf"(?<!\w){src}(?!\w)", flags)
         else:
-            pat = re.compile(pattern, flags)
+            pat = re.compile(src, flags)
     except re.error as e:
         return SearchResponse(ok=False, error=f"Invalid regex: {e}")
 
-    # 搜索范围：scope 为文件 → 只搜该文件；为目录 → 只搜该子树；否则整个 root
+
     if scope is not None and scope.is_file():
         base, names = scope.parent, [scope.name]
     elif scope is not None:
@@ -370,7 +409,7 @@ def _search_with_regex(
     )
 
 
-# ── 公开 API：文本搜索 ─────────────────────────────
+
 
 def search_text(
     pattern: str,
@@ -381,12 +420,13 @@ def search_text(
     max_results: int = 50,
     whole_word: bool = False,
     extra_ignore: Optional[list[str]] = None,
+    literal: bool = False,
 ) -> SearchResponse:
     root = find_project_root(path)
     scope = _resolve_scope(path, root)
     ignore = DEFAULT_IGNORE + (extra_ignore or []) + load_extra_ignore(root)
 
-    # 空 pattern 会让 rg 匹配每一行，属于误用，直接拒绝
+
     if not pattern or not pattern.strip():
         return SearchResponse(ok=False, error="Empty search pattern")
 
@@ -396,23 +436,23 @@ def search_text(
             error=f"Search pattern too long ({len(pattern)} chars > {MAX_PATTERN_LEN})",
         )
 
-    # 参数归一化，防止负数 / 非法值 / DoS
+
     context_lines = _safe_int(context_lines, 2, 0, MAX_CONTEXT_LINES)
     max_results = _safe_int(max_results, 50, 1, MAX_RESULTS_CAP)
 
     if has_ripgrep():
         return _search_with_rg(
             pattern, root, scope, extensions, ignore,
-            context_lines, case_insensitive, max_results, whole_word,
+            context_lines, case_insensitive, max_results, whole_word, literal,
         )
     else:
         return _search_with_regex(
             pattern, root, scope, extensions, ignore,
-            context_lines, case_insensitive, max_results, whole_word,
+            context_lines, case_insensitive, max_results, whole_word, literal,
         )
 
 
-# ── 公开 API：符号搜索 ─────────────────────────────
+
 
 @dataclass
 class SymbolMatch:
@@ -435,7 +475,7 @@ class SymbolResponse:
     files_searched: int = 0
     elapsed_ms: float = 0
     error: str = ""
-    # def 专用：exact=候选全部来自精确同名；substring=已回退子串匹配（需核对候选）
+
     match_mode: str = ""
 
     def to_dict(self) -> dict:
@@ -450,6 +490,28 @@ class SymbolResponse:
         if self.match_mode:
             data["match_mode"] = self.match_mode
         return {"ok": True, "data": data}
+
+
+def _resolve_scan_scope(path: str, extra_ignore: Optional[list[str]]):
+    """符号扫描的范围解析（search_symbols 与 find_definition 共用一处真理）。
+
+    返回 (base, names, prefix)：base = 扫描目录；names = 文件清单（相对 base）；
+    prefix = base 相对项目根的前缀（输出相对路径用）。
+    """
+    root = find_project_root(path)
+    scope = _resolve_scope(path, root)
+    ignore = DEFAULT_IGNORE + (extra_ignore or []) + load_extra_ignore(root)
+
+    if scope is not None and scope.is_file():
+        base, names = scope.parent, [scope.name]
+    elif scope is not None:
+        base, names = scope, build_file_list(scope, None, ignore)
+    else:
+        base, names = root, build_file_list(root, None, ignore)
+    prefix = "" if base == root else _rel_to(root, base)
+    if prefix in (".", ""):
+        prefix = ""
+    return base, names, prefix
 
 
 def search_symbols(
@@ -469,21 +531,8 @@ def search_symbols(
     if partial:
         needle = name.lower()
     t0 = time.monotonic()
-    root = find_project_root(path)
-    scope = _resolve_scope(path, root)
-    ignore = DEFAULT_IGNORE + (extra_ignore or []) + load_extra_ignore(root)
     max_results = _safe_int(max_results, 50, 1, MAX_RESULTS_CAP)
-
-    # 搜索范围：scope 为文件 → 只搜该文件；为目录 → 只搜该子树；否则整个 root
-    if scope is not None and scope.is_file():
-        base, names = scope.parent, [scope.name]
-    elif scope is not None:
-        base, names = scope, build_file_list(scope, None, ignore)
-    else:
-        base, names = root, build_file_list(root, None, ignore)
-    prefix = "" if base == root else _rel_to(root, base)
-    if prefix in (".", ""):
-        prefix = ""
+    base, names, prefix = _resolve_scan_scope(path, extra_ignore)
 
     matches: list[SymbolMatch] = []
     searched = 0
@@ -526,7 +575,7 @@ def search_symbols(
     )
 
 
-# ── 公开 API：查找定义 ─────────────────────────────
+
 
 def find_definition(
     name: str,
@@ -548,23 +597,65 @@ def find_definition(
     """
     priority = {"class": 0, "struct": 0, "interface": 0, "trait": 0,
                 "enum": 1, "type": 1, "function": 2, "method": 3}
-    resp = search_symbols(name, path, max_results=max_results,
-                          extra_ignore=extra_ignore, partial=False)
-    mode = "exact"
-    if not resp.matches and substring_fallback:
-        resp = search_symbols(name, path, max_results=max_results,
-                              extra_ignore=extra_ignore, partial=True)
-        mode = "substring"
+
+
+
+
+
+    max_results = _safe_int(max_results, 50, 1, MAX_RESULTS_CAP)
+    base, names, prefix = _resolve_scan_scope(path, extra_ignore)
+    needle = name.lower()
+    t0 = time.monotonic()
+    exact: list[SymbolMatch] = []
+    sub: list[SymbolMatch] = []
+    searched = 0
+
+    for fname in names:
+        fpath = str(Path(prefix) / fname) if prefix else fname
+        lang = detect_lang(fpath)
+        if not lang:
+            continue
+        full = base / fname
+        try:
+            lines = read_text_auto(full).splitlines()
+        except (OSError, PermissionError):
+            continue
+        searched += 1
+
+        for s in extract_symbols(lines, lang, fpath):
+            if s.name == name:
+                if len(exact) < max_results:
+                    line_text = lines[s.line - 1] if s.line <= len(lines) else ""
+                    exact.append(SymbolMatch(file=fpath, symbol=s, line_text=line_text.rstrip()))
+            elif not exact and len(sub) < max_results and needle in s.name.lower():
+
+
+
+                line_text = lines[s.line - 1] if s.line <= len(lines) else ""
+                sub.append(SymbolMatch(file=fpath, symbol=s, line_text=line_text.rstrip()))
+
+        if len(exact) >= max_results:
+            break
+
+    if exact or not substring_fallback:
+        matches, mode = exact, "exact"
+    else:
+        matches, mode = sub, "substring"
 
     def _key(m):
-        exact = 0 if m.symbol.name == name else 1
-        return (exact, priority.get(m.symbol.kind, 99), m.symbol.line)
-    resp.matches.sort(key=_key)
-    resp.match_mode = mode
-    return resp
+        e = 0 if m.symbol.name == name else 1
+        return (e, priority.get(m.symbol.kind, 99), m.symbol.line)
+    matches.sort(key=_key)
+    return SymbolResponse(
+        matches=matches,
+        total=len(matches),
+        files_searched=searched,
+        elapsed_ms=(time.monotonic() - t0) * 1000,
+        match_mode=mode,
+    )
 
 
-# ── 公开 API：查找引用 ─────────────────────────────
+
 
 def find_references(
     name: str,
@@ -573,16 +664,19 @@ def find_references(
     extra_ignore: Optional[list[str]] = None,
 ) -> SearchResponse:
     """查找符号的所有引用（使用文本搜索）。"""
+
+
     return search_text(
         pattern=name,
         path=path,
         whole_word=True,
+        literal=True,
         max_results=_safe_int(max_results, 100, 1, MAX_RESULTS_CAP),
         extra_ignore=extra_ignore,
     )
 
 
-# ── 公开 API：项目树 ───────────────────────────────
+
 
 def project_tree(
     path: str = ".",
@@ -594,7 +688,7 @@ def project_tree(
     ignore = DEFAULT_IGNORE + (extra_ignore or []) + load_extra_ignore(root)
     depth = _safe_int(depth, 3, 0, MAX_TREE_DEPTH)
 
-    # 传入子目录/文件时以它为显示起点（ignore 的相对路径仍以项目根为基准）
+
     start = root
     if scope is not None:
         start = scope.parent if scope.is_file() else scope

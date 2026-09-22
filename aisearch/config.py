@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-# ── 默认忽略目录/文件 ──────────────────────────────
+
 DEFAULT_IGNORE: list[str] = [
     ".git", ".svn", ".hg",
     "node_modules", "__pycache__", ".pytest_cache",
@@ -19,7 +19,7 @@ DEFAULT_IGNORE: list[str] = [
     "vendor", "Pods", ".next", ".nuxt",
 ]
 
-# ── 扩展名 → 语言 ──────────────────────────────────
+
 EXT_LANG: dict[str, str] = {
     ".py": "python", ".pyi": "python",
     ".js": "javascript", ".jsx": "javascript", ".mjs": "javascript",
@@ -59,15 +59,15 @@ EXT_LANG: dict[str, str] = {
     ".dockerfile": "dockerfile",
 }
 
-# 扩展名集合，用于快速过滤
+
 CODE_EXTS: set[str] = set(EXT_LANG.keys())
 
 
-# ── 工具函数 ────────────────────────────────────────
+
 
 def detect_lang(path: str | Path) -> Optional[str]:
     p = Path(path)
-    # 特殊文件名
+
     name = p.name.lower()
     if name in ("dockerfile", "makefile", "rakefile", "gemfile"):
         return name
@@ -82,8 +82,8 @@ def should_ignore(name: str, ignore_list: list[str], rel_path: str = "") -> bool
     支持：精确目录/文件名、*.ext 通配、以及含 / 的相对路径前缀（如 src/generated）。
     rel_path 为相对项目根的路径，用于路径前缀匹配。
     """
-    # Windows 下 os.walk / relative_to 产出的是反斜杠，模式里写的是正斜杠，
-    # 不归一化会让 `src/generated` 这类规则在 Windows 上静默失效
+
+
     rel_norm = rel_path.replace("\\", "/") if rel_path else ""
     for pat in ignore_list:
         pat_norm = pat.replace("\\", "/")
@@ -121,7 +121,7 @@ def load_extra_ignore(root: Path) -> list[str]:
     ignore_file = root / ".aisearchignore"
     if not ignore_file.exists():
         return []
-    # 防御：.aisearchignore 可能是目录或不可读（恶意/异常项目结构），静默跳过
+
     try:
         text = ignore_file.read_text(encoding="utf-8", errors="replace")
     except (OSError, PermissionError):
@@ -198,7 +198,7 @@ def safe_resolve(ref: str, root: Path, boundary: str = "root") -> Path:
     if "\x00" in ref:
         raise ValueError("Path contains NUL byte")
 
-    # 绝对路径按原样解析；相对路径相对 root 解析
+
     p = Path(ref)
     full = (p if p.is_absolute() else (root / ref)).resolve()
 
@@ -219,8 +219,8 @@ def build_file_list(
     files: list[str] = []
     for dirpath, dirnames, filenames in os.walk(root):
         cur = Path(dirpath)
-        # 目录也按相对路径剪枝：否则 `src/generated` 这种规则拦不住目录，
-        # 仍会整棵走下去（大仓库上白白遍历几千个文件）
+
+
         dirnames[:] = sorted(
             d for d in dirnames if not should_ignore(d, ignore, rel_path=_rel_of(cur / d, root))
         )

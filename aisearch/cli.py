@@ -16,8 +16,8 @@ from .config import is_output_tty
 
 
 def main():
-    # Windows 下 stdout/stderr 默认 gbk，输出含中文/emoji 的 UTF-8 JSON 会崩溃。
-    # AI 消费场景要求严格 UTF-8，故强制重配置（管道/文件重定向同样受益）。
+
+
     try:
         if hasattr(sys.stdout, "reconfigure"):
             sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -34,7 +34,7 @@ def main():
 
     sub = parser.add_subparsers(dest="command", help="可用命令")
 
-    # ── grep: 文本搜索 ───────────────────────────
+
     p_grep = sub.add_parser("grep", help="文本搜索 (grep 替代)")
     p_grep.add_argument("pattern", help="搜索模式 (正则)")
     p_grep.add_argument("path", nargs="?", default=".", help="搜索路径 (默认当前目录)")
@@ -46,7 +46,7 @@ def main():
     p_grep.add_argument("--json", action="store_true", help="JSON 输出")
     p_grep.add_argument("--text", action="store_true", help="文本输出")
 
-    # ── sym: 符号搜索 ───────────────────────────
+
     p_sym = sub.add_parser("sym", help="符号搜索 (函数/类/结构体)")
     p_sym.add_argument("name", help="符号名称（默认按子串匹配）")
     p_sym.add_argument("path", nargs="?", default=".", help="搜索路径")
@@ -56,14 +56,14 @@ def main():
     p_sym.add_argument("--json", action="store_true")
     p_sym.add_argument("--text", action="store_true")
 
-    # ── def: 查找定义 ───────────────────────────
+
     p_def = sub.add_parser("def", help="查找符号定义")
     p_def.add_argument("name", help="符号名称")
     p_def.add_argument("path", nargs="?", default=".", help="搜索路径")
     p_def.add_argument("--json", action="store_true")
     p_def.add_argument("--text", action="store_true")
 
-    # ── ref: 查找引用 ───────────────────────────
+
     p_ref = sub.add_parser("ref", help="查找符号引用")
     p_ref.add_argument("name", help="符号名称")
     p_ref.add_argument("path", nargs="?", default=".", help="搜索路径")
@@ -71,7 +71,7 @@ def main():
     p_ref.add_argument("--json", action="store_true")
     p_ref.add_argument("--text", action="store_true")
 
-    # ── cat: 智能读文件 ─────────────────────────
+
     p_cat = sub.add_parser("cat", help="智能读取文件")
     p_cat.add_argument("file", help="文件引用 (file.py / file.py:10-50 / file.py#func)")
     p_cat.add_argument("path", nargs="?", default=".", help="项目路径")
@@ -79,7 +79,7 @@ def main():
     p_cat.add_argument("--json", action="store_true")
     p_cat.add_argument("--text", action="store_true")
 
-    # ── ctx: 获取上下文 ─────────────────────────
+
     p_ctx = sub.add_parser("ctx", help="获取某行的丰富上下文")
     p_ctx.add_argument("location", help="位置 (file.py:42)")
     p_ctx.add_argument("path", nargs="?", default=".", help="项目路径")
@@ -87,14 +87,14 @@ def main():
     p_ctx.add_argument("--json", action="store_true")
     p_ctx.add_argument("--text", action="store_true")
 
-    # ── tree: 项目目录树 ────────────────────────
+
     p_tree = sub.add_parser("tree", help="项目目录树")
     p_tree.add_argument("path", nargs="?", default=".", help="项目路径")
     p_tree.add_argument("-d", "--depth", type=int, default=3, help="显示深度 (默认 3)")
     p_tree.add_argument("--json", action="store_true")
     p_tree.add_argument("--text", action="store_true")
 
-    # ── rpc: stdio 无服务模式 ───────────────────
+
     p_rpc = sub.add_parser(
         "rpc",
         help="stdio JSON 模式：不监听端口，AI 以子进程拉起，stdin/stdout 通信",
@@ -110,13 +110,13 @@ def main():
         parser.print_help()
         sys.exit(1)
 
-    # 输出格式判断
+
     use_json = _choose_output(args)
 
-    # ── 执行命令 ────────────────────────────────
 
-    # CLI 全局兜底：任何未预期异常都转为结构化输出（JSON 或 stderr 文本），
-    # 绝不让 traceback 污染 AI 读取的 stdout
+
+
+
     try:
         if args.command == "grep":
             _cmd_grep(args, use_json)
@@ -151,11 +151,11 @@ def _choose_output(args) -> bool:
         return False
     if getattr(args, "json", False):
         return True
-    # 默认：管道（非 TTY，通常是 AI 调用）→ JSON；交互终端 → 文本
+
     return not is_output_tty()
 
 
-# ── 命令实现 ────────────────────────────────────────
+
 
 def _cmd_grep(args, use_json):
     from .engine import search_text
@@ -226,13 +226,13 @@ def _cmd_ref(args, use_json):
 def _cmd_cat(args, use_json):
     from .reader import read_file
 
-    # 本地 CLI 显式读取时与用户同级信任（boundary=system）；rpc --root 才锁定项目根
+
     result = read_file(
         file_ref=args.file,
         path=args.path,
         outline_only=args.outline,
         boundary="system",
-        human=not use_json,  # 文本渲染=人；--json/管道=AI（不带整文件大纲）
+        human=not use_json,
     )
 
     if use_json:
@@ -256,7 +256,7 @@ def _cmd_ctx(args, use_json):
         _print_json({"ok": False, "error": f"Invalid line number: {line_str}"})
         sys.exit(1)
 
-    # 本地 CLI 显式读取时允许系统路径
+
     result = get_context(
         file_ref=file_ref,
         line=line,
@@ -288,7 +288,7 @@ def _cmd_rpc(args):
     run_rpc(root=args.root)
 
 
-# ── 输出函数 ────────────────────────────────────────
+
 
 def _print_json(data):
     print(json.dumps(data, ensure_ascii=False, indent=2))
@@ -420,7 +420,7 @@ def _print_ctx_text(result):
     content = d.get("content", "")
     if content:
         content_lines = content.splitlines()
-        # 内容窗口起点：优先用数据里给的真实起点（窗口被文件头/尾截断时估算必错位）
+
         start_line = d.get("window_start") or max(1, line - (len(content_lines) // 2))
         print()
         for i, cl in enumerate(content_lines):

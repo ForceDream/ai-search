@@ -1,22 +1,22 @@
-/**
- * 正则驱动的符号提取 —— 对齐 Python 版 symbols.py。
- * 不需要 LSP，开箱即用。
- */
+
+
+
+
 
 import { count_char, lstrip, rstrip } from "./util.mjs";
 import { detect_lang } from "./config.mjs";
 
-// ── 数据结构 ────────────────────────────────────────
+
 
 export function make_symbol(kind, name, line, indent = 0) {
   return {
-    kind,          // class / function / method / struct / trait / import ...
+    kind,
     name,
-    line,          // 1-based
-    line_end: 0,   // 1-based, 0 = 未知
+    line,
+    line_end: 0,
     col: 0,
     indent,
-    parent: "",    // 所属类/命名空间
+    parent: "",
   };
 }
 
@@ -28,11 +28,11 @@ export function symbol_to_dict(s) {
 }
 
 
-// ── 每种语言的符号正则 ──────────────────────────────
-// 每项: [kind, regex, want_group]
-// Python re.match 隐式锚定开头 → JS 用带 ^ 的正则 exec。
 
-// 关键字黑名单，避免把 if (x) {}、for (...) {} 等误判为方法
+
+
+
+
 const _JS_KW = "get|set|if|for|while|switch|catch|return|typeof|new|do|else|await|class|function|with|try|finally|throw|delete|yield|using|lock";
 
 const PYTHON_PATTERNS = [
@@ -45,7 +45,7 @@ const JAVASCRIPT_PATTERNS = [
   ["function", /^(\s*)(?:export\s+(?:default\s+)?)?(?:async\s+)?function\s+(\w+)/, 2],
   ["function", /^(\s*)(?:export\s+)?(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?\(/, 2],
   ["function", /^(\s*)(?:export\s+)?(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?(?:\([^)]*\)|\w+)\s*=>/, 2],
-  // 类方法简写：handle_request() { ... }；关键字加 \b 避免误伤 forEach 等
+
   ["method", new RegExp(
     "^(\\s*)(?:async\\s+)?(?!(?:" + _JS_KW + ")\\b)(\\w+)\\s*\\([^)]*\\)\\s*[\\{:]"
   ), 2],
@@ -53,8 +53,8 @@ const JAVASCRIPT_PATTERNS = [
 
 const TYPESCRIPT_EXTRA = [
   ["interface", /^(\s*)(?:export\s+)?interface\s+(\w+)/, 2],
-  // type 别名后面必然跟 `=` / 泛型 `<` / 对象字面量 `{`；
-  // 不加这个锚定会把多行 `import type {\n  type Tool,}` 块里的列表项当成定义
+
+
   ["type", /^(\s*)(?:export\s+)?type\s+(\w+)\s*[=<{]/, 2],
   ["enum", /^(\s*)(?:export\s+)?(?:const\s+)?enum\s+(\w+)/, 2],
 ];
@@ -71,7 +71,9 @@ const RUST_PATTERNS = [
   ["struct", /^(\s*)(?:pub\s+)?struct\s+(\w+)/, 2],
   ["enum", /^(\s*)(?:pub\s+)?enum\s+(\w+)/, 2],
   ["trait", /^(\s*)(?:pub\s+)?trait\s+(\w+)/, 2],
-  ["impl", /^(\s*)impl(?:\s*<[^>]*>)?\s+(?:\w+)?(?:\s+for\s+)?(\w+)/, 2],
+
+
+  ["impl", /^(\s*)impl(?:\s*<[^>]*>)?\s+(?:.*?\sfor\s+)?(\w+)\s*(?:<[^>]*>)?\s*(?:\{|where|$)/, 2],
   ["type", /^(\s*)(?:pub\s+)?type\s+(\w+)/, 2],
   ["macro", /^(\s*)(?:pub\s+)?macro_rules!\s+(\w+)/, 2],
 ];
@@ -122,7 +124,7 @@ export const LANG_PATTERNS = {
   php: PHP_PATTERNS,
   c: C_PATTERNS,
   cpp: CPP_EXTRA,
-  csharp: JAVA_PATTERNS,  // C# 与 Java 模式接近
+  csharp: JAVA_PATTERNS,
   shell: SHELL_PATTERNS,
   lua: [["function", /^(\s*)(?:local\s+)?function\s+(\w+)/, 2]],
   swift: [
@@ -146,7 +148,7 @@ const CLASS_KINDS = new Set([
   "class", "struct", "interface", "trait", "enum", "module", "namespace", "object",
 ]);
 
-// ── 编译缓存 ────────────────────────────────────────
+
 
 const _compiled_cache = new Map();
 
@@ -159,14 +161,14 @@ function _get_compiled(lang) {
 }
 
 
-// ── 公开 API ────────────────────────────────────────
 
-// 单文件符号数上限：防御病态文件（如一行一个 def）导致
-// extract_symbols O(S) 与 _calc_ranges O(S×N) 的组合爆炸
+
+
+
 export const MAX_SYMBOLS_PER_FILE = 5000;
 
 export function extract_symbols(lines, lang, file_path = "") {
-  /** 从源代码行列表中提取所有符号。 */
+  
   const compiled = _get_compiled(lang);
   if (!compiled.length) return [];
 
@@ -174,13 +176,13 @@ export function extract_symbols(lines, lang, file_path = "") {
   let current_class = "";
 
   for (let idx = 0; idx < lines.length; idx++) {
-    if (symbols.length >= MAX_SYMBOLS_PER_FILE) break; // 符号数超限：截断（防 DoS）
+    if (symbols.length >= MAX_SYMBOLS_PER_FILE) break;
     const line = lines[idx];
     const lineno = idx + 1;
     const stripped = rstrip(line);
     if (!stripped) continue;
     const ls = lstrip(stripped);
-    // 跳过注释行（按语言粗略判断）
+
     if (ls.startsWith("#") || ls.startsWith("//") || ls.startsWith("--")) continue;
 
     const indent = line.length - lstrip(line).length;
@@ -193,7 +195,7 @@ export function extract_symbols(lines, lang, file_path = "") {
 
         const sym = make_symbol(cp.kind, name, lineno, indent);
 
-        // 更新 parent 上下文
+
         if (CLASS_KINDS.has(cp.kind)) {
           current_class = name;
         } else if (indent > 0 && current_class) {
@@ -201,22 +203,22 @@ export function extract_symbols(lines, lang, file_path = "") {
         }
 
         symbols.push(sym);
-        break; // 一行只匹配一个符号
+        break;
       }
     }
   }
 
-  // 计算每个符号的范围（行结束位置）
+
   _calc_ranges(symbols, lines, lang);
   return symbols;
 }
 
 
 export function iter_symbol_decls(lineIter, lang) {
-  /**
-   * 流式扫描符号声明（line_end 置 0，不计算范围），用于大文件避免整文件载入。
-   * lineIter 产出 [lineno, line] 二元组。
-   */
+  
+
+
+
   const compiled = _get_compiled(lang);
   if (!compiled.length) return [];
   const symbols = [];
@@ -251,9 +253,9 @@ export function iter_symbol_decls(lineIter, lang) {
 
 
 export function compute_symbol_end_from_chunk(chunk, lang, sym) {
-  /**
-   * 在从 sym.line 起头的行块上复用 _calc_ranges 推算结束行，并映射回原文行号。
-   */
+  
+
+
   const temp = make_symbol(sym.kind, sym.name, 1, sym.indent);
   _calc_ranges([temp], chunk, lang);
   return sym.line - 1 + temp.line_end;
@@ -261,7 +263,7 @@ export function compute_symbol_end_from_chunk(chunk, lang, sym) {
 
 
 export function _calc_ranges(symbols, lines, lang) {
-  /** 推算每个符号的结束行：花括号语言按配平计数，缩进语言按缩进扫描。 */
+  
   if (!symbols.length) return;
 
   const brace_langs = new Set([
@@ -270,36 +272,77 @@ export function _calc_ranges(symbols, lines, lang) {
   ]);
   const n = lines.length;
 
-  for (const sym of symbols) {
-    if (brace_langs.has(lang)) {
-      // 花括号计数：必须扫到配平或文件尾。
-      // 不能用"下一个符号行号"截断扫描窗口——类/命名空间的结束括号
-      // 远在其首个嵌套成员之后，截断会把类范围错算成声明行。
-      let brace_count = 0;
-      let started = false;
-      let end = sym.line - 1;
-      let closed = false; // 模拟 Python for-else
-      for (let j = sym.line - 1; j < n; j++) {
-        for (const ch of lines[j]) {
-          if (ch === "{") {
-            brace_count += 1;
-            started = true;
-          } else if (ch === "}") {
-            brace_count -= 1;
-          }
-        }
-        if (started && brace_count <= 0) {
-          end = j + 1;
-          closed = true;
-          break;
+  if (brace_langs.has(lang)) {
+
+
+
+    const delta = new Array(n).fill(0);
+    const opens = new Array(n).fill(false);
+    for (let j = 0; j < n; j++) {
+      let d = 0;
+      let has = false;
+      for (const ch of lines[j]) {
+        if (ch === "{") { d += 1; has = true; }
+        else if (ch === "}") d -= 1;
+      }
+      delta[j] = d;
+      opens[j] = has;
+    }
+    const depth = new Array(n + 1).fill(0);
+    for (let j = 0; j < n; j++) depth[j + 1] = depth[j] + delta[j];
+    const next_open = new Array(n + 1).fill(n);
+    for (let j = n - 1; j >= 0; j--) next_open[j] = opens[j] ? j : next_open[j + 1];
+
+    const activate_at = new Map();
+    const activated = new Set();
+    symbols.forEach((sym, idx) => {
+      const start0 = sym.line - 1;
+      const act = next_open[start0];
+      if (act < n) {
+        if (!activate_at.has(act)) activate_at.set(act, []);
+
+
+        activate_at.get(act).push([idx, depth[start0]]);
+        activated.add(idx);
+      }
+    });
+
+    const end_of = new Map();
+    const active = new Map();
+    let max_base = null;
+    for (let j = 0; j < n; j++) {
+      const starts = activate_at.get(j);
+      if (starts) {
+        for (const [idx, b] of starts) {
+          if (!active.has(b)) active.set(b, []);
+          active.get(b).push(idx);
+          if (max_base === null || b > max_base) max_base = b;
         }
       }
-      if (!closed && started) end = n; // 未配平（畸形文件）：保守取到文件尾
-      sym.line_end = Math.max(end, sym.line);
+      const d_after = depth[j + 1];
+
+      while (max_base !== null && max_base >= d_after) {
+        for (const idx of active.get(max_base) ?? []) end_of.set(idx, j + 1);
+        active.delete(max_base);
+        max_base = active.size ? Math.max(...active.keys()) : null;
+      }
+    }
+    symbols.forEach((sym, idx) => {
+      let e;
+      if (end_of.has(idx)) e = end_of.get(idx);
+      else if (activated.has(idx)) e = n;
+      else e = sym.line - 1;
+      sym.line_end = Math.max(e, sym.line);
+    });
+  }
+
+  for (const sym of symbols) {
+    if (brace_langs.has(lang)) {
+      continue;
     } else {
-      // 缩进语言（Python 等）：先跳过多行签名——
-      // 签名收尾行 `) -> X:` 的缩进等于 base，会提前终止缩进扫描，
-      // 因此从头按括号配平找到 "行尾冒号" 才算签名结束。
+
+
+
       const base_indent = sym.indent;
       const j0 = sym.line - 1;
       let header_end = j0;
@@ -330,7 +373,7 @@ export function _calc_ranges(symbols, lines, lang) {
           break;
         }
       }
-      // 去掉尾部空行，避免 #symbol 读取带出多余空行
+
       while (end > sym.line && lines[end - 1].trim() === "") end -= 1;
       sym.line_end = Math.max(end, sym.line);
     }
@@ -339,11 +382,11 @@ export function _calc_ranges(symbols, lines, lang) {
 
 
 export function find_symbol_by_name(lines, lang, name, partial = false) {
-  /** 查找特定名称的符号（partial=True 时支持子串匹配）。 */
+  
   const syms = extract_symbols(lines, lang);
   for (const s of syms) {
     if (partial) {
-      // Python: name.lower() in s.name.lower()（name 是 needle）
+
       if (s.name.toLowerCase().includes(name.toLowerCase())) {
         return s;
       }
@@ -356,7 +399,7 @@ export function find_symbol_by_name(lines, lang, name, partial = false) {
 
 
 export function find_containing_symbol(lines, lang, target_line) {
-  /** 查找包含 target_line 的最小范围符号。 */
+  
   const syms = extract_symbols(lines, lang);
   let best = null;
   let best_size = Infinity;
@@ -375,10 +418,10 @@ export function find_containing_symbol(lines, lang, target_line) {
 
 
 export function extract_imports(lines, lang) {
-  /** 提取 import 语句。 */
+  
   const imports = [];
 
-  // Go 的标准 import 块是多行的，需要专门处理
+
   if (lang === "go") {
     let in_block = false;
     for (const line of lines) {

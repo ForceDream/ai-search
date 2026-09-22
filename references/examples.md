@@ -1,6 +1,6 @@
 # aisearch 样例（真实输出）
 
-`<SKILL_DIR>` = 本技能目录（即 `SKILL.md` 所在目录，CodeBuddy 中也可写作 `${CODEBUDDY_SKILL_DIR}`）。
+`<SKILL_DIR>` = 本技能目录（即 `SKILL.md` 所在目录），加载技能时系统会给出其绝对路径（Base directory）。
 
 语料：`assets/demo/`（`src/orders.py`、`src/tool.ts`、`src/usage.ts`）。
 把 `assets/demo` 复制到任意临时目录，用该目录作 `--root`，即可原样重放下面全部请求：

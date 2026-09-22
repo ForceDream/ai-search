@@ -25,8 +25,8 @@ from pathlib import Path
 from . import __version__, engine, reader
 from .config import find_project_root, is_relative_to
 
-# 单行请求上限（字节），防止恶意超大行撑爆内存
-MAX_LINE_BYTES = 1 * 1024 * 1024  # 1 MB
+
+MAX_LINE_BYTES = 1 * 1024 * 1024
 
 _METHODS = ("search", "symbols", "def", "ref", "read", "context", "tree", "health")
 
@@ -46,7 +46,7 @@ class RpcSession:
         self.default_path = default_path
         self.boundary = boundary
 
-    # ── 单请求处理 ──────────────────────────────
+
 
     def handle(self, req: dict) -> dict:
         rid = req.get("id")
@@ -63,11 +63,11 @@ class RpcSession:
             }
         try:
             data = handler(params)
-        except Exception as e:  # 任何处理异常都转为结构化错误，绝不崩进程
+        except Exception as e:
             return {"id": rid, "ok": False, "error": f"{type(e).__name__}: {e}"}
         return {"id": rid, "ok": True, "data": data}
 
-    # ── 方法实现 ────────────────────────────────
+
 
     def _path(self, params: dict) -> str:
         return params.get("path") or self.default_path
@@ -194,8 +194,8 @@ def run_rpc(root: str | None = None):
     运行 stdio 循环。root 非空时锁定项目根并启用 boundary=root；
     否则以 cwd 为默认路径，boundary=system（与 CLI 同级信任）。
     """
-    # 协议流强制 UTF-8：防止调用方 locale 为 C/ASCII 时，
-    # 请求里的非 ASCII 字符（中文标识符、中文 pattern）直接解码崩溃
+
+
     try:
         sys.stdin.reconfigure(encoding="utf-8", errors="replace")
         sys.stdout.reconfigure(encoding="utf-8")
@@ -209,30 +209,67 @@ def run_rpc(root: str | None = None):
     stdin = sys.stdin
     stdout = sys.stdout
 
+    def _emit(resp: dict) -> None:
+
+        stdout.write(json.dumps(resp, ensure_ascii=False, separators=(",", ":")) + "\n")
+        stdout.flush()
+
+    def _handle_line(line: str) -> None:
+        try:
+            req = json.loads(line)
+            if not isinstance(req, dict):
+                raise ValueError("Request must be a JSON object")
+        except (json.JSONDecodeError, ValueError) as e:
+            _emit({"id": None, "ok": False, "error": f"Invalid request: {e}"})
+            return
+        _emit(session.handle(req))
+
     try:
-        for raw in stdin:
-            if len(raw) > MAX_LINE_BYTES:
-                resp = {"id": None, "ok": False,
-                        "error": f"Request line too large (>{MAX_LINE_BYTES} bytes)"}
-            else:
-                # 兼容 Windows 管道/PowerShell 在首行插入的 BOM（\ufeff）
-                line = raw.strip().lstrip("\ufeff").strip()
+
+
+
+
+        buf = b""
+        dropping = False
+        too_large = {"id": None, "ok": False,
+                     "error": f"Request line too large (>{MAX_LINE_BYTES} bytes)"}
+        while True:
+            chunk = stdin.buffer.read1(65536) if hasattr(stdin, "buffer") else stdin.read(65536)
+            if not chunk:
+                break
+            if isinstance(chunk, str):
+                chunk = chunk.encode("utf-8", "replace")
+            buf += chunk
+            while True:
+                nl = buf.find(b"\n")
+                if nl < 0:
+                    if not dropping and len(buf) > MAX_LINE_BYTES:
+                        dropping = True
+                        buf = b""
+                        _emit(too_large)
+                    break
+                raw, buf = buf[:nl], buf[nl + 1:]
+                if dropping:
+                    dropping = False
+                    continue
+                if len(raw) > MAX_LINE_BYTES:
+                    _emit(too_large)
+                    continue
+
+                line = raw.decode("utf-8", errors="replace").strip().lstrip("\ufeff").strip()
                 if not line:
                     continue
-                try:
-                    req = json.loads(line)
-                    if not isinstance(req, dict):
-                        raise ValueError("Request must be a JSON object")
-                except (json.JSONDecodeError, ValueError) as e:
-                    resp = {"id": None, "ok": False, "error": f"Invalid request: {e}"}
-                else:
-                    resp = session.handle(req)
+                _handle_line(line)
+        if buf and not dropping:
 
-            # separators 对齐 Node 版 JSON.stringify（无空格），保证双实现输出字节级一致
-            stdout.write(json.dumps(resp, ensure_ascii=False, separators=(",", ":")) + "\n")
-            stdout.flush()
+            if len(buf) > MAX_LINE_BYTES:
+                _emit(too_large)
+            else:
+                line = buf.decode("utf-8", errors="replace").strip().lstrip("\ufeff").strip()
+                if line:
+                    _handle_line(line)
     except BrokenPipeError:
-        # 调用方提前关闭管道：正常结束，不打印 traceback 污染 stderr
+
         return
     except KeyboardInterrupt:
         return

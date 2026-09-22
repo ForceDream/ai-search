@@ -23,7 +23,7 @@ aisearch rpc --root /path/to/proj  # 锁定项目根（boundary=root，拦截 ..
 
 | method | params | data 关键字段 |
 |---|---|---|
-| `search` | `pattern`(必), `path`, `context`=2, `limit`=50, `ignore_case`, `whole_word`, `extensions`=[] | `matches[{file,line,col,text,symbol?,context_before,context_after}]`, `total`, `files_searched`, `elapsed_ms` |
+| `search` | `pattern`(必), `path`, `context`=2, `limit`=50, `ignore_case`, `whole_word`, `extensions`=[] | `matches[{file,line,col,text,symbol?,context_before,context_after}]`, `total`, `files_searched`, `elapsed_ms`；`col` 为行内匹配起点的**码点**偏移（0 基，非字节、非 UTF-16 码元） |
 | `symbols` | `name`(必), `path`, `kind`, `limit`=50, `partial`=true | `matches[{file,kind,name,line,line_end,parent?,text}]`, `total`, `files_searched` |
 | `def` | `name`(必), `path`, `limit`?=50, `substring_fallback`?=true | **两级匹配**：exact 优先——候选全部来自定义正则且符号名完全相等（`match_mode:"exact"`），杜绝子串命中稀释与 import/使用行混入；exact 无命中时回退子串匹配并标 `match_mode:"substring"`（候选需核对）。`substring_fallback:false` 关闭回退。排序：精确名 > class/struct/interface/trait > enum/type > function > method > 行号 |
 | `ref` | `name`(必), `path`, `limit`=100 | 同 `search`（全词匹配的引用位置） |

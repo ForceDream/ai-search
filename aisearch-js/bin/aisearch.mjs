@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-/**
- * CLI 入口 —— 7 个命令覆盖 AI 90% 的代码导航需求。对齐 Python 版 cli.py。
- *
- * 默认输出策略：
- *   - 显式 --text / --json 优先
- *   - 否则：管道（非 TTY，AI 读取）→ JSON；交互终端 → 人类可读彩色文本
- */
+
+
+
+
+
+
+
 
 import { VERSION, is_output_tty } from "../src/config.mjs";
 import {
@@ -21,7 +21,7 @@ import { read_file, get_context, read_result_to_dict, context_result_to_dict } f
 import { run_rpc } from "../src/rpc.mjs";
 import { py_int } from "../src/util.mjs";
 
-// ── 极简参数解析（对齐 argparse 常用行为）──────────
+
 
 class UsageError extends Error {}
 
@@ -43,7 +43,7 @@ function parse_int_arg(flag, value) {
 }
 
 function parse_args(argv, positional_names, flag_specs) {
-  /** 返回 { values: {...defaults}, positional: [...] } */
+  
   const values = {};
   const positional = [];
   const flag_map = build_flag_map(flag_specs);
@@ -153,7 +153,7 @@ const COMMON_END_FLAGS = [
   { name: "--text", key: "text", action: "store_true" },
 ];
 
-// ── 主入口 ──────────────────────────────────────────
+
 
 function main() {
   const argv = process.argv.slice(2);
@@ -191,8 +191,8 @@ function main() {
       process.stderr.write(`${HELP.split("\n")[0]}\naisearch: error: ${e.message}\n`);
       process.exit(2);
     }
-    // 未预期异常：转为结构化输出（对齐 Python 版 CLI 全局兜底），
-    // 绝不让 stack trace 污染 AI 读取的 stdout
+
+
     const use_json = !rest.includes("--text") &&
       (rest.includes("--json") || !process.stdout.isTTY);
     if (use_json) {
@@ -205,10 +205,10 @@ function main() {
 }
 
 function choose_output(args) {
-  /** 返回 true 表示 JSON 输出。 */
+  
   if (args.text) return false;
   if (args.json) return true;
-  // 默认：管道（非 TTY，通常是 AI 调用）→ JSON；交互终端 → 文本
+
   return !is_output_tty();
 }
 
@@ -218,7 +218,7 @@ function require_arg(args, key, cmd) {
   }
 }
 
-// ── 命令实现 ────────────────────────────────────────
+
 
 function cmd_grep(rest) {
   const args = parse_args(
@@ -319,7 +319,7 @@ function cmd_cat(rest) {
   require_arg(args, "file", "cat");
   const use_json = choose_output(args);
 
-  // 本地 CLI 显式读取时允许系统路径（CLI 与用户同级信任）
+
   const result = read_file(args.file, args.path ?? ".", Boolean(args.outline), "system", !use_json);
   if (use_json) print_json(read_result_to_dict(result));
   else print_cat_text(read_result_to_dict(result));
@@ -348,7 +348,7 @@ function cmd_ctx(rest) {
     process.exit(1);
   }
 
-  // 本地 CLI 显式读取时允许系统路径
+
   const result = get_context(file_ref, line, args.path ?? ".", args.radius ?? 5, "system", !use_json);
   if (use_json) print_json(context_result_to_dict(result));
   else print_ctx_text(context_result_to_dict(result));
@@ -374,14 +374,14 @@ function cmd_rpc(rest) {
 }
 
 
-// ── 输出函数 ────────────────────────────────────────
+
 
 function print_json(data) {
   console.log(JSON.stringify(data, null, 2));
 }
 
 function print_grep_text(resp) {
-  /** 以类似 ripgrep 的格式输出文本。 */
+  
   if (!resp.ok) {
     process.stderr.write(`Error: ${resp.error}\n`);
     return;
@@ -518,7 +518,7 @@ function print_ctx_text(result) {
   const content = d.content ?? "";
   if (content) {
     const content_lines = content.split("\n");
-    // 内容窗口起点：优先用数据里给的真实起点（窗口被文件头/尾截断时估算必错位）
+
     const start_line = d.window_start || Math.max(1, line - Math.floor(content_lines.length / 2));
     console.log("");
     for (let i = 0; i < content_lines.length; i++) {
@@ -543,7 +543,7 @@ function print_ctx_text(result) {
 }
 
 function print_tree_text(tree_data) {
-  /** 以 tree 命令的格式输出目录树。 */
+  
   const root = tree_data.root ?? ".";
   const entries = tree_data.tree ?? [];
   console.log(`\x1b[1;35m${root}\x1b[0m`);
