@@ -129,7 +129,6 @@ def _make_project(tmp_path):
 
 
 def test_aisearchignore_path_pattern(tmp_path):
-    """`.aisearchignore` 中 `src/generated` 这类含 / 的路径模式应生效。"""
     root = _make_project(tmp_path)
     (root / "src" / "generated").mkdir(parents=True)
     (root / "src" / "keep.py").write_text("def a():\n    pass\n")
@@ -152,7 +151,6 @@ def test_aisearchignore_path_pattern(tmp_path):
 
 
 def test_filename_with_hash_and_colon(tmp_path):
-    """文件名本身含 # 或 : 时，整体路径存在则按普通路径读取。"""
     root = _make_project(tmp_path)
     weird = root / "src"
     weird.mkdir()
@@ -164,7 +162,6 @@ def test_filename_with_hash_and_colon(tmp_path):
 
 
 def test_symbol_unique_partial_fallback(tmp_path):
-    """精确未命中但子串唯一命中时回退；多个候选时报 ambiguous。"""
     root = _make_project(tmp_path)
     (root / "a.py").write_text(
         "def real_one():\n    return 1\n\n\ndef other():\n    return 2\n"

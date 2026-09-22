@@ -44,7 +44,6 @@ def check(label, ok, detail=""):
 
 
 def cli(kind, args, cwd, timeout=30, env_extra=None):
-    """跑一次 CLI，返回 (stdout, stderr, returncode, elapsed)。"""
     bin_ = PY_BIN if kind == "py" else JS_BIN
     env = dict(os.environ)
     if env_extra:
@@ -59,7 +58,6 @@ def cli(kind, args, cwd, timeout=30, env_extra=None):
 
 
 def cli_json(kind, args, cwd, **kw):
-    """返回解析后的 JSON；参数用法错误（rc=2，usage 到 stderr）视为结构化拒绝。"""
     out, err, rc, dt = cli(kind, args, cwd, **kw)
     if rc == "TIMEOUT":
         return None, dt
@@ -75,7 +73,6 @@ def cli_json(kind, args, cwd, **kw):
 
 
 def rpc_round(kind, lines, cwd, root=None, timeout=60):
-    """灌多行请求进 rpc，返回 (每行解析后的响应列表, 进程是否存活)。"""
     bin_ = PY_BIN if kind == "py" else JS_BIN
     args = bin_ + (["rpc", "--root", root] if root else ["rpc"])
     payload = "\n".join(lines) + "\n"

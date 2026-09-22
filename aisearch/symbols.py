@@ -181,7 +181,6 @@ def extract_symbols(
     lang: str,
     file_path: str = "",
 ) -> list[Symbol]:
-    """从源代码行列表中提取所有符号。"""
     compiled = _get_compiled(lang)
     if not compiled:
         return []
@@ -233,10 +232,6 @@ def extract_symbols(
 
 
 def iter_symbol_decls(line_iter, lang, file_path: str = "", max_symbols: int = MAX_SYMBOLS_PER_FILE):
-    """
-    流式扫描符号声明（line_end 置 0，不计算范围），用于大文件避免整文件载入内存。
-    line_iter 产出 (lineno, line) 元组。
-    """
     compiled = _get_compiled(lang)
     if not compiled:
         return []
@@ -269,17 +264,12 @@ def iter_symbol_decls(line_iter, lang, file_path: str = "", max_symbols: int = M
 
 
 def compute_symbol_end_from_chunk(chunk: list[str], lang: str, sym: Symbol) -> int:
-    """
-    在从 sym.line 起头的行块上复用 _calc_ranges 推算结束行，并映射回原文行号。
-    当块被截断（line_end == len(chunk)）时返回截断处，调用方应再按 total 收敛。
-    """
     temp = Symbol(kind=sym.kind, name=sym.name, line=1, indent=sym.indent)
     _calc_ranges([temp], chunk, lang)
     return sym.line - 1 + temp.line_end
 
 
 def _calc_ranges(symbols: list[Symbol], lines: list[str], lang: str):
-    """推算每个符号的结束行：花括号语言按配平计数，缩进语言按缩进扫描。"""
     if not symbols:
         return
 
@@ -397,7 +387,6 @@ def find_symbol_by_name(
     name: str,
     partial: bool = False,
 ) -> Optional[Symbol]:
-    """查找特定名称的符号（partial=True 时支持子串匹配）。"""
     syms = extract_symbols(lines, lang)
     for s in syms:
         if partial:
@@ -413,7 +402,6 @@ def find_containing_symbol(
     lang: str,
     target_line: int,
 ) -> Optional[Symbol]:
-    """查找包含 target_line 的最小范围符号。"""
     syms = extract_symbols(lines, lang)
     best: Optional[Symbol] = None
     best_size = float("inf")
@@ -428,7 +416,6 @@ def find_containing_symbol(
 
 
 def extract_imports(lines: list[str], lang: str) -> list[str]:
-    """提取 import 语句。"""
     imports: list[str] = []
 
 

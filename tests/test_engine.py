@@ -70,7 +70,6 @@ def _norm(p: str) -> str:
 
 
 def test_search_text_scoped_to_single_file(sample_root):
-    """path 指向单文件时只搜该文件。"""
     target = sample_root / "src" / "main.py"
     resp = engine.search_text("def", path=str(target), max_results=100)
     assert resp.ok
@@ -80,14 +79,12 @@ def test_search_text_scoped_to_single_file(sample_root):
 
 
 def test_search_text_scoped_to_subdir(sample_root):
-    """path 指向子目录时只搜该子树。"""
     resp = engine.search_text("def", path=str(sample_root / "src"), max_results=100)
     assert resp.ok
     assert all(_norm(m.file).startswith("src/") for m in resp.matches)
 
 
 def test_search_symbols_scoped_to_single_file(sample_root):
-    """符号搜索同样支持按文件限定。"""
     target = sample_root / "src" / "main.py"
     resp = engine.search_symbols("process", path=str(target))
     assert resp.ok
@@ -96,7 +93,6 @@ def test_search_symbols_scoped_to_single_file(sample_root):
 
 
 def test_project_tree_started_at_subdir(sample_root):
-    """tree 传子目录时以该目录为显示起点，并给出 project_root。"""
     tree = engine.project_tree(path=str(sample_root / "src"), depth=5)
     names = [e["name"] for e in tree["tree"]]
     assert "main.py" in names

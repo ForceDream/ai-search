@@ -92,7 +92,6 @@ _REDOS_RE = re.compile(r"\([^()]*[*+][^()]*\)\s*(?:[*+]|\{\d+,\})")
 
 
 def _safe_int(value, default: int, lo: int, hi: int) -> int:
-    """把任意输入安全地转成 [lo, hi] 区间内的整数，非法输入回退默认值。"""
     try:
         n = int(value)
     except (TypeError, ValueError, OverflowError):
@@ -183,14 +182,6 @@ def _search_with_rg(
     ctx_lines: dict[int, str] = {}
 
     def _attach_context() -> None:
-        """按**行号窗口**给本文件的 match 回填 context。
-
-        修复旧实现按"消息顺序 + 布尔标志"归属的缺陷：in_context_before 只在
-        begin/end 复位，于是同文件第 2 个 match 的 context_before 恒为空，
-        而它的前文被错挂到上一个 match 的 context_after（多命中文件必现）。
-        rg 的 context 消息自带 line_number，按 [line-k, line-1] / [line+1, line+k]
-        取窗口才是正确归属，且天然覆盖"相邻 match 的窗口重叠"。
-        """
         if context_lines > 0:
             for m in file_matches:
                 m.context_before = [ctx_lines[k] for k in range(max(1, m.line - context_lines), m.line) if k in ctx_lines]
@@ -258,12 +249,6 @@ def _search_with_rg(
 
 
 def _byte_offset_to_col(text: str, byte_off: int) -> int:
-    """rg 的 `submatches[].start` 是**字节**偏移；对外统一用**码点**列号。
-
-    三条路径（rg / 回退引擎 / Node 回退）若各自沿用原生口径，同一行含中文或 emoji
-    时列号就会不同（服务器语料实测：含 `🧹` 的行 Python 21 vs Node 22）。
-    码点是 Python 回退引擎（`m.start()`）的天然口径，故以它为基准。
-    """
     if byte_off <= 0:
         return 0
     acc = 0
@@ -284,7 +269,6 @@ def _rel_path(full: str, root: Path) -> str:
 
 
 def _rel_to(root: Path, p: Path) -> str:
-    """把 p 表示为相对 root 的路径；不在 root 内时返回其字符串形式。"""
     try:
         return str(Path(p).relative_to(root))
     except ValueError:
@@ -292,15 +276,6 @@ def _rel_to(root: Path, p: Path) -> str:
 
 
 def _resolve_scope(path: str, root: Path) -> Optional[Path]:
-    """把 path 解析为"搜索范围"，使 path 能限定到单文件或子目录。
-
-    返回：
-      * 文件路径        → 只搜该文件
-      * root 内的目录   → 只搜该子树
-      * 其它（含 None） → 搜整个项目 root（保持原有"以项目根为工作目录"语义）
-
-    安全：仅接受 root 内的目录，避免 path="." 恰好位于项目之上时把整盘当范围。
-    """
     try:
         p = Path(path).expanduser()
         if not p.is_absolute():
@@ -493,11 +468,6 @@ class SymbolResponse:
 
 
 def _resolve_scan_scope(path: str, extra_ignore: Optional[list[str]]):
-    """符号扫描的范围解析（search_symbols 与 find_definition 共用一处真理）。
-
-    返回 (base, names, prefix)：base = 扫描目录；names = 文件清单（相对 base）；
-    prefix = base 相对项目根的前缀（输出相对路径用）。
-    """
     root = find_project_root(path)
     scope = _resolve_scope(path, root)
     ignore = DEFAULT_IGNORE + (extra_ignore or []) + load_extra_ignore(root)
@@ -522,12 +492,6 @@ def search_symbols(
     extra_ignore: Optional[list[str]] = None,
     partial: bool = True,
 ) -> SymbolResponse:
-    """
-    搜索代码符号（函数、类、结构体等）。
-
-    partial=True 时按子串（大小写不敏感）匹配，更适合 AI 模糊查找；
-    partial=False 时仅精确匹配同名符号。
-    """
     if partial:
         needle = name.lower()
     t0 = time.monotonic()
@@ -663,7 +627,6 @@ def find_references(
     max_results: int = 100,
     extra_ignore: Optional[list[str]] = None,
 ) -> SearchResponse:
-    """查找符号的所有引用（使用文本搜索）。"""
 
 
     return search_text(

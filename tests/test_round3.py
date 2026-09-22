@@ -52,7 +52,6 @@ def test_multiline_signature_full_range(tmp_path):
 
 
 def test_multiline_signature_real_codebase():
-    """对本仓库自身：engine.search_text 的 #symbol 读取应包含完整函数体。"""
     res = reader.read_file("aisearch/engine.py#search_text", path=str(REPO_ROOT))
     assert res.ok
     assert "return _search_with_rg" in res.content

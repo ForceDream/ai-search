@@ -66,7 +66,6 @@ def _mini_project(tmp_path):
 
 
 def test_binary_file_rejected(tmp_path):
-    """二进制文件应结构化拒绝，而不是按文本读出乱码。"""
     root = _mini_project(tmp_path)
     (root / "blob.png").write_bytes(b"\x89PNG\r\n\x1a\n" + bytes(range(256)) * 8)
     res = reader.read_file("blob.png", path=str(root))
@@ -83,7 +82,6 @@ def test_binary_file_rejected_for_context(tmp_path):
 
 
 def test_huge_single_line_content_capped(tmp_path):
-    """超长单行（预览按行截断失效）必须按字符上限截断。"""
     root = _mini_project(tmp_path)
     (root / "huge.py").write_text("x = '" + "a" * 300_000 + "'\n")
     res = reader.read_file("huge.py", path=str(root))
@@ -93,7 +91,6 @@ def test_huge_single_line_content_capped(tmp_path):
 
 
 def test_content_cap_updates_line_range(tmp_path):
-    """截断后 lines.end 必须反映实际覆盖范围，而不是仍报整文件。"""
     root = _mini_project(tmp_path)
     (root / "big.py").write_text("".join(f"x{i} = 1\n" for i in range(60000)))
     res = reader.read_file("big.py", path=str(root))
@@ -114,7 +111,6 @@ def test_ctx_content_capped(tmp_path):
 
 
 def test_utf16_bom_not_treated_as_binary(tmp_path):
-    """带 BOM 的 UTF-16 含 NUL 字节，但属于文本，不应被误判为二进制。"""
     root = _mini_project(tmp_path)
     (root / "u16.py").write_bytes(b"\xff\xfe" + "def f():\n    return 1\n".encode("utf-16-le"))
     res = reader.read_file("u16.py", path=str(root))

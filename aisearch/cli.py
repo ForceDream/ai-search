@@ -146,7 +146,6 @@ def main():
 
 
 def _choose_output(args) -> bool:
-    """返回 True 表示 JSON 输出。"""
     if getattr(args, "text", False):
         return False
     if getattr(args, "json", False):
@@ -295,7 +294,6 @@ def _print_json(data):
 
 
 def _print_grep_text(resp):
-    """以类似 ripgrep 的格式输出文本。"""
     data = resp.to_dict()
     if not data.get("ok"):
         print(f"Error: {data.get('error')}", file=sys.stderr)
@@ -440,7 +438,6 @@ def _print_ctx_text(result):
 
 
 def _print_tree_text(tree_data: dict):
-    """以 tree 命令的格式输出目录树。"""
     root = tree_data.get("root", ".")
     entries = tree_data.get("tree", [])
     print(f"\033[1;35m{root}\033[0m")

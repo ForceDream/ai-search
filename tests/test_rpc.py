@@ -112,7 +112,6 @@ def test_rpc_missing_params_defaults(session):
 
 
 def _run_rpc_proc(args, requests, raw_lines=None):
-    """启动子进程，逐行喂请求，收齐响应。"""
     proc = subprocess.Popen(
         [sys.executable, "-m", "aisearch", "rpc"] + args,
         stdin=subprocess.PIPE, stdout=subprocess.PIPE,

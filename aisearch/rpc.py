@@ -40,7 +40,6 @@ def _clamp(value, default, lo, hi):
 
 
 class RpcSession:
-    """一次 rpc 会话：持有默认路径与边界策略。"""
 
     def __init__(self, default_path: str = ".", boundary: str = "system"):
         self.default_path = default_path
@@ -73,12 +72,6 @@ class RpcSession:
         return params.get("path") or self.default_path
 
     def _check_path(self, params: dict) -> str:
-        """
-        boundary=root 时校验查询路径锁定在本项目内，防止通过
-        path=/ 或 ../../ 越权枚举任意目录（search/symbols/def/ref/tree）。
-        校验 find_project_root 的结果：所有文件读取都发生在该 root 下，
-        它在界内则整个查询面在界内。
-        """
         p = self._path(params)
         if self.boundary == "root":
             base = Path(self.default_path).resolve()
@@ -190,10 +183,6 @@ class RpcSession:
 
 
 def run_rpc(root: str | None = None):
-    """
-    运行 stdio 循环。root 非空时锁定项目根并启用 boundary=root；
-    否则以 cwd 为默认路径，boundary=system（与 CLI 同级信任）。
-    """
 
 
     try:

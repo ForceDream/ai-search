@@ -48,7 +48,6 @@ def est_tokens(text: str) -> int:
 _ELAPSED = re.compile(r'("elapsed_ms":\s*)[0-9.]+')
 
 def norm_tokens(text: str) -> int:
-    """elapsed_ms 归零后计 token（保证确定性）。"""
     return est_tokens(_ELAPSED.sub(r"\g<1>0", text))
 
 
@@ -60,7 +59,6 @@ def sh(cmd, cwd):
 
 
 def run_grep(steps, cwd):
-    """基线：steps 为 shell 命令列表（sh -c）。"""
     outs = []
     for s in steps:
         out, dt = sh(["sh", "-c", s], cwd)
@@ -69,7 +67,6 @@ def run_grep(steps, cwd):
 
 
 def run_cli(kind, steps, cwd):
-    """steps: [argv,...]；py 直接在 cwd 内读（相对路径）；js 用 --path 指语料库。"""
     bin_ = PY if kind == "py" else JS
     outs = []
     for argv in steps:
@@ -95,7 +92,6 @@ def run_rpc(kind, reqs, cwd):
 
 
 def measure(steps_out):
-    """[(输入文本, 输出文本, dt)] → 汇总。"""
     in_tok = sum(norm_tokens(i) for i, _, _ in steps_out)
     out_tok = sum(norm_tokens(o) for _, o, _ in steps_out)
     calls = len(steps_out)
