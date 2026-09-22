@@ -26,6 +26,13 @@ user-invocable: true
 
 只要机器上有 **Python >= 3.9 或 Node** 之一即可，无需安装、不监听端口。
 
+## 脚本路径（两种安装方式）
+
+命令里的 `<SKILL_DIR>` 指**本技能目录**，取决于安装方式：
+
+- SkillHub / 放进 skills 目录：`~/.codebuddy/skills/aisearch`（发布版写作 `${CODEBUDDY_SKILL_DIR}`）
+- 插件安装（`code-search-tools@baozi-tools`）：`<插件根>/skills/aisearch`，插件根用 `${CODEBUDDY_PLUGIN_ROOT}` 取，或用 `codebuddy plugin list` 查
+
 ## 什么时候用我（触发词）
 
 **触发词**：查定义 / 找引用 / 谁调用了它 / 读这个函数 / 这行在哪个函数里 / 项目目录结构 / grep 替代 / LSP 替代 / 省 token 的代码检索。
