@@ -22,12 +22,12 @@ import tempfile
 import time
 from pathlib import Path
 
-# 路径相对本脚本解析，并可用环境变量覆盖 → 不绑定任何机器/本地目录。
-HERE = Path(__file__).resolve().parent       # .../aisearch-js/tests
-JS_ROOT = HERE.parent                        # .../aisearch-js
-REPO_ROOT = JS_ROOT.parent                   # 含 aisearch/ 与 aisearch-js/ 的仓库根
 
-PY_BIN = os.environ.get("AISEARCH_PY_BIN", "aisearch").split()   # py console script
+HERE = Path(__file__).resolve().parent
+JS_ROOT = HERE.parent
+REPO_ROOT = JS_ROOT.parent
+
+PY_BIN = os.environ.get("AISEARCH_PY_BIN", "aisearch").split()
 JS_BIN = [os.environ.get("NODE_BIN", "node"), str(JS_ROOT / "bin" / "aisearch.mjs")]
 
 SANDBOX = None
@@ -64,7 +64,7 @@ def cli_json(kind, args, cwd, **kw):
     if rc == "TIMEOUT":
         return None, dt
     if rc == 2:
-        # argparse（py）/ UsageError（js）：用法错误输出到 stderr + exit 2，属结构化拒绝
+
         return {"ok": False, "error": "usage error (rc=2)"}, dt
     if rc not in (0, 1):
         return None, dt
@@ -114,10 +114,10 @@ def setup_sandbox():
                 "}\n")
     with open(os.path.join(proj, "README.md"), "w") as f:
         f.write("hello fuzz target token here\n")
-    # 长行文件（ReDoS 用）
+
     with open(os.path.join(src, "long.py"), "w") as f:
         f.write("x" * 4000 + "\n" + "a" * 4000 + "\n")
-    # 恶意 .aisearchignore：目录 + 奇怪规则
+
     os.makedirs(os.path.join(proj, ".aisearchignore"))
     return proj
 
@@ -130,12 +130,12 @@ def main():
     CWD["py"] = str(REPO_ROOT)
     CWD["js"] = str(JS_ROOT)
 
-    # ────────────────────────────────────────────
-    # A. CLI fuzz
-    # ────────────────────────────────────────────
+
+
+
     print("== A. CLI fuzz ==")
     cli_cases = [
-        # 路径穿越 / 越权（CLI cat/ctx 是 boundary=system，设计允许读系统文件 → 只断言不崩、结构化）
+
         ("cat /etc/hostname (system-boundary by design)", ["cat", "/etc/hostname"], None),
         ("cat relative traversal", ["cat", "../../etc/hostname"], None),
         ("cat traversal + line", ["cat", "/etc/hostname:1-2"], None),
@@ -187,24 +187,24 @@ def main():
             d, dt = cli_json(kind, args, proj)
             check(f"[{kind}] {label}", d is not None and "ok" in d, f"{dt:.1f}s")
 
-        # 全盘扫描（CLI=system 边界，设计允许）：验证 rg 30s 自超时返回结构化结果
+
         for label, args in [("grep path=/ self-timeout", ["grep", "bin", "/", "--limit", "3"]),
                             ("sym path=/ self-timeout", ["sym", "user", "/", "--limit", "3"])]:
             d, dt = cli_json(kind, args, proj, timeout=60)
             check(f"[{kind}] {label}", d is not None and "ok" in d, f"{dt:.1f}s")
 
-        # pattern 以 '-' 开头（argparse 层：需 -- 分隔；两版均应结构化拒绝或正常）
+
         out, err, rc, _ = cli(kind, ["grep", "--", "-abc"], proj)
         ok = (rc in (0, 1, 2)) and (("ok" in out) or ("usage" in err.lower() or err == ""))
         check(f"[{kind}] grep '--' '-abc' structured", ok, f"rc={rc}")
 
-        # 超长非 pattern 输入（500 字符文件引用）
+
         d, _ = cli_json(kind, ["cat", "src/" + "x" * 500 + ".py"], proj)
         check(f"[{kind}] cat 500-char ref structured", d is not None and "ok" in d)
 
-    # ────────────────────────────────────────────
-    # C. ReDoS 缓解（强制纯回退 + 恶意正则，限时）
-    # ────────────────────────────────────────────
+
+
+
     print("== C. ReDoS mitigation (pure-fallback path) ==")
     redo_spatterns = ["(a+)+$", "(a|a)*$", "(a|aa)+$", "^(a+)*b", "((a)*)*x"]
     for kind in ("py", "js"):
@@ -218,11 +218,11 @@ def main():
         check(f"[{kind}] ReDoS 300-char rejected",
               d is not None and d.get("ok") is False and "too long" in d.get("error", ""))
 
-    # ────────────────────────────────────────────
-    # B. rpc fuzz
-    # ────────────────────────────────────────────
+
+
+
     print("== B. rpc fuzz ==")
-    root_cases = [  # (label, req) —— root 模式必须拒绝
+    root_cases = [
         ("search path=/tmp", {"id": 1, "method": "search", "params": {"pattern": "x", "path": "/tmp"}}),
         ("symbols path=/etc", {"id": 2, "method": "symbols", "params": {"name": "x", "path": "/etc"}}),
         ("def path=/usr", {"id": 3, "method": "def", "params": {"name": "x", "path": "/usr"}}),
@@ -279,7 +279,7 @@ def main():
         ("health ok", {"id": 49, "method": "health", "params": {}}),
     ]
     for kind in ("py", "js"):
-        # 非法 JSON / 非对象 / 超大行
+
         raw_lines = ["{not json", "[1,2,3]", '"just a string"', "123", "null", "   "]
         resps, alive = rpc_round(kind, raw_lines, proj)
         check(f"[{kind}] rpc protocol junk handled", alive and all(
@@ -292,32 +292,32 @@ def main():
         check(f"[{kind}] rpc 1MB-line sandwich survives", alive and len(resps) >= 2
               and resps[0].get("ok") is True and resps[-1].get("ok") is True, f"{len(resps)} resp")
 
-        # 请求风暴：50 条混合
+
         storm = [json.dumps({"id": i, "method": ["search", "symbols", "tree", "health"][i % 4],
                              "params": {"pattern": "x", "name": "x", "path": ".."}[{"search": "pattern", "symbols": "name"}.get(["search", "symbols", "tree", "health"][i % 4], "path")]})
                  for i in range(50)]
         resps, alive = rpc_round(kind, storm, proj, root=proj)
         check(f"[{kind}] rpc 50-request storm alive", alive and len(resps) == 50)
 
-        # root 边界（--root 项目内）
+
         resps, alive = rpc_round(kind, [json.dumps(r) for _, r in root_cases], proj, root=proj)
         all_rejected = alive and len(resps) == len(root_cases) and all(
             r and r.get("ok") is False and "escapes" in str(r.get("error", "")) for r in resps)
         check(f"[{kind}] rpc root-boundary rejects all 7", all_rejected)
 
-        # generic 用例（只断言结构化 + 不崩；一次会话灌完）
+
         lines = [json.dumps(r) for _, r in generic_cases]
         resps, alive = rpc_round(kind, lines, proj, root=proj)
         structured = alive and len(resps) == len(generic_cases) and all(
             r is not None and "ok" in r for r in resps)
         check(f"[{kind}] rpc {len(generic_cases)} generic cases structured", structured)
 
-        # health 与 root 报告
+
         resps, _ = rpc_round(kind, ['{"id": 1, "method": "health"}'], proj, root=proj)
         ok_health = resps and resps[0].get("ok") and resps[0]["data"]["boundary"] == "root"
         check(f"[{kind}] rpc health reports boundary=root", ok_health)
 
-    # ────────────────────────────────────────────
+
     print(f"\n== fuzz summary: {counts['pass']} pass, {counts['fail']} fail ==")
     shutil.rmtree(SANDBOX, ignore_errors=True)
     sys.exit(0 if counts["fail"] == 0 else 1)

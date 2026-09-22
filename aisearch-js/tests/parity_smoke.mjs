@@ -1,16 +1,16 @@
 #!/usr/bin/env node
-// parity 冒烟测试：py 版与 js 版逐命令 JSON 深比较（剥离 elapsed_ms）
+
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-// 路径全部相对本脚本解析，并可用环境变量覆盖 → 不绑定任何机器/本地目录。
-const HERE = path.dirname(fileURLToPath(import.meta.url)); // .../aisearch-js/tests
-const JS_ROOT = path.resolve(HERE, "..");                  // .../aisearch-js
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const JS_ROOT = path.resolve(HERE, "..");
 const JS_CLI = path.join(JS_ROOT, "bin", "aisearch.mjs");
-const PY_ROOT = process.env.AISEARCH_PY_ROOT || path.resolve(JS_ROOT, ".."); // 同级 Python 仓库根
+const PY_ROOT = process.env.AISEARCH_PY_ROOT || path.resolve(JS_ROOT, "..");
 const PY_BIN = process.env.AISEARCH_PY_BIN || (process.platform === "win32" ? "python" : "python3");
-const TARGET = process.argv[2] || PY_ROOT;                 // 被搜索的项目
+const TARGET = process.argv[2] || PY_ROOT;
 
 function run_py(args) {
   const r = spawnSync(PY_BIN, ["-c",
@@ -37,8 +37,8 @@ function strip_elapsed(x) {
   return x;
 }
 
-// rg 多线程遍历顺序非确定 → matches 按 (file,line,col,text) 排序后比较；
-// files_searched 受遍历顺序影响仅当截断时不同 → 大 limit 下一致
+
+
 function normalize(x) {
   x = strip_elapsed(x);
   if (x && typeof x === "object" && x.ok && x.data && Array.isArray(x.data.matches)) {
@@ -47,7 +47,7 @@ function normalize(x) {
         b.file + ":" + b.line + ":" + b.col + ":" + b.text));
   }
   if (x && typeof x === "object" && x.ok === false) {
-    // 错误消息文本是给人看的（两语言正则引擎措辞不同），只比较结构
+
     return { ok: false, error: "<message>" };
   }
   return x;
@@ -70,13 +70,13 @@ function deep_equal(a, b) {
   return false;
 }
 
-// 命令集：成功流 + 错误流（-n 大 limit 避免截断顺序差异）
+
 const CASES = [
   { name: "grep-rg", args: ["grep", "safe_resolve", TARGET, "-n", "5000", "--json"] },
   { name: "grep-norg", args: ["grep", "safe_resolve", TARGET, "-n", "5000", "--json"], no_rg: true },
   { name: "grep-ci", args: ["grep", "SYMBOL", TARGET, "-i", "-n", "5000", "--json"] },
-  // 显式 ASCII 字符类：纯 JS 回退的 \w 为 ASCII 语义，而 py/rg 为 Unicode 语义
-  // （详见 README「与 Python 版的差异」），此处避免用 \w 混淆协议一致性判定。
+
+
   { name: "grep-regex", args: ["grep", "def [A-Za-z0-9_]+_[A-Za-z0-9_]+", TARGET, "-n", "5000", "--json"] },
   { name: "grep-word", args: ["grep", "cat", TARGET, "-w", "-n", "5000", "--json"] },
   { name: "grep-type", args: ["grep", "def", TARGET, "-t", "py", "-n", "5000", "--json"] },

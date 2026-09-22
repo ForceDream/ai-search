@@ -1,24 +1,24 @@
 #!/usr/bin/env bash
-# aisearch 通用安装脚本 —— macOS / Linux
-#
-# 安装仓库根目录下的 Python 包（editable），并检查 Node 版可用性。
-#
-# 用法:
-#   bash all/install.sh              # 基础安装
-#   bash all/install.sh --test       # 附加测试依赖（pytest）
-#   bash all/install.sh --full       # 附加可选增强（tree-sitter）
-#   bash all/install.sh --no-js      # 跳过 Node 检查
-#   （技能形态不在本分支维护，见仓库的 skill 分支：git checkout skill）
-#
-# 环境变量:
-#   PYTHON=python3.12 bash all/install.sh     # 指定解释器
-#   VENV=1 bash all/install.sh                # 先在 .venv 建虚拟环境再安装
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 set -eu
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/.." && pwd)"
 
-# ── 解释器探测（macOS/Linux 通用）──────────────────
+
 PY="${PYTHON:-}"
 if [ -z "$PY" ]; then
   if command -v python3 >/dev/null 2>&1; then PY=python3
@@ -31,11 +31,11 @@ if [ -z "$PY" ]; then
   fi
 fi
 
-# ── 可选：虚拟环境 ────────────────────────────────
+
 if [ "${VENV:-0}" = "1" ] && [ ! -d "$REPO/.venv" ]; then
   echo "== 创建虚拟环境 .venv =="
   "$PY" -m venv "$REPO/.venv"
-  # shellcheck disable=SC1091
+
   . "$REPO/.venv/bin/activate"
   PY="$REPO/.venv/bin/python"
 fi

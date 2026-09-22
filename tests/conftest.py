@@ -6,7 +6,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).parents[1]
 
-# 让子进程里的 `python -m aisearch rpc` 也能找到包（否则端到端用例依赖外部 PYTHONPATH）
+
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 os.environ["PYTHONPATH"] = str(REPO_ROOT) + os.pathsep + os.environ.get("PYTHONPATH", "")

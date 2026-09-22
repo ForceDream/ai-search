@@ -18,10 +18,10 @@ import sys
 import tarfile
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent   # .../all
-REPO = HERE.parent                       # 仓库根
+HERE = Path(__file__).resolve().parent
+REPO = HERE.parent
 
-# 不纳入全集的目录 / 文件
+
 SKIP_DIRS = {".git", "__pycache__", ".pytest_cache", ".mypy_cache",
              "node_modules", ".venv", "venv", "build", "dist", "htmlcov", "all"}
 SKIP_FILES = {"source.md", "aisearch-source.tar.gz", "python.exe"}
@@ -29,10 +29,10 @@ INCLUDE_SUFFIX = {".py", ".mjs", ".js", ".json", ".toml", ".md",
                   ".sh", ".ps1", ".cmd", ".css", ".txt"}
 EXTRA_NAMES = {"LICENSE", ".gitignore"}
 
-# 机器 / 项目专有串：命中即拒绝生成。
-# 注意：下面刻意用拼接构造，避免检测器自身的清单在朴素 grep 下被当作"残留"误报。
-_SLASH = chr(47)   # "/"
-_BSLASH = chr(92)  # "\"
+
+
+_SLASH = chr(47)
+_BSLASH = chr(92)
 FORBIDDEN = [
     "D:" + _SLASH, "D:" + _BSLASH,
     "C:" + _SLASH + "Users", "C:" + _BSLASH + "Users",
@@ -64,7 +64,7 @@ def main() -> int:
         print("未收集到任何文件，请检查仓库结构。")
         return 1
 
-    # 1) 禁用串扫描（只扫可解码为文本的文件）
+
     bad: list[tuple[str, str]] = []
     for p in files:
         try:
@@ -80,7 +80,7 @@ def main() -> int:
             print(f"  {r}   <- 命中 {s!r}")
         return 1
 
-    # 2) SOURCE.md
+
     head = [
         "# aisearch 源码全集（通用版 / all）",
         "",
@@ -109,7 +109,7 @@ def main() -> int:
     out_md = HERE / "SOURCE.md"
     out_md.write_text("\n".join(head) + "\n\n" + "\n".join(bodies), encoding="utf-8")
 
-    # 3) tar.gz（同一文件集合）
+
     out_tar = HERE / "aisearch-source.tar.gz"
     with tarfile.open(out_tar, "w:gz") as tf:
         for p in files:

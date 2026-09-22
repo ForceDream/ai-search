@@ -19,7 +19,7 @@ def _req(session, method, params, rid=1):
     return session.handle({"id": rid, "method": method, "params": params})
 
 
-# ── 方法分发 ────────────────────────────────────────
+
 
 def test_health(session):
     resp = _req(session, "health", {})
@@ -74,7 +74,7 @@ def test_tree(session):
     assert any(e["name"] == "src" for e in resp["data"]["tree"])
 
 
-# ── 边界与健壮性 ────────────────────────────────────
+
 
 def test_rpc_root_boundary_blocks_traversal(session):
     resp = _req(session, "read", {"file": "../../../etc/passwd"})
@@ -103,13 +103,13 @@ def test_rpc_bad_params_never_crash(session):
 
 
 def test_rpc_missing_params_defaults(session):
-    # params 缺省时也能给出结构化错误而非崩溃
+
     resp = session.handle({"id": 1, "method": "search"})
     assert resp["id"] == 1
     assert not resp["ok"]
 
 
-# ── 端到端：真实子进程，验证"无端口"通信 ────────────
+
 
 def _run_rpc_proc(args, requests, raw_lines=None):
     """启动子进程，逐行喂请求，收齐响应。"""
@@ -140,8 +140,8 @@ def test_rpc_end_to_end_subprocess(sample_root):
     assert responses[0]["ok"] and responses[0]["data"]["version"]
     assert responses[1]["ok"] and responses[1]["data"]["total"] >= 1
     assert responses[2]["ok"]
-    assert not responses[3]["ok"]                        # unknown method, id=4
-    assert responses[4]["id"] is None and not responses[4]["ok"]  # 裸非法 JSON
+    assert not responses[3]["ok"]
+    assert responses[4]["id"] is None and not responses[4]["ok"]
 
 
 def test_rpc_blank_and_oversize_lines(sample_root):
@@ -151,10 +151,10 @@ def test_rpc_blank_and_oversize_lines(sample_root):
         stderr=subprocess.PIPE, text=True,
     )
     lines = [
-        "",                                   # 空行应被忽略，不产生响应
+        "",
         json.dumps({"id": 1, "method": "health", "params": {}}),
     ]
     out, err = proc.communicate("\n".join(lines) + "\n", timeout=60)
     resp_lines = [l for l in out.splitlines() if l.strip()]
-    assert len(resp_lines) == 1            # 只有 1 条响应
+    assert len(resp_lines) == 1
     assert json.loads(resp_lines[0])["id"] == 1

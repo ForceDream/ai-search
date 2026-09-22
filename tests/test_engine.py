@@ -53,17 +53,17 @@ def test_find_references(sample_root):
 def test_project_tree(sample_root):
     tree = engine.project_tree(path=str(sample_root), depth=5)
     assert tree["root"]
-    # 应包含 src 目录
+
     assert any(e["type"] == "dir" and e["name"] == "src" for e in tree["tree"])
 
 
 def test_invalid_regex_returns_error(sample_root):
     resp = engine.search_text(r"([a-z", path=str(sample_root))
-    # 纯 Python 回退会捕获非法正则；ripgrep 模式返回 ok=False
+
     assert (not resp.ok) or resp.total == 0
 
 
-# ── path 范围限定（回归：传文件/子目录不得再被上溯为整个项目根）──
+
 
 def _norm(p: str) -> str:
     return p.replace("\\", "/")

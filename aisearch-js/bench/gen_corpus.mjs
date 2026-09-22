@@ -1,27 +1,27 @@
 #!/usr/bin/env node
-/**
- * 基准语料生成器（确定性，固定种子）：
- *   <BENCH_DIR>/corpus/  下生成 120 .py + 90 .ts + 60 .go
- *   <BENCH_DIR>/manifest.json  记录每个文件的全部符号（kind/name/line/line_end）
- *
- * 语料特点：
- *   - 全 ASCII、确定性内容（mulberry32 固定种子）
- *   - 含多行签名函数（测试符号范围算法）
- *   - 含嵌套类 / Go 方法接收器 / TS interface+enum
- *   - 种植 6 个查询 token（定义 + 调用混合），行级命中数可预算
- *
- * manifest 是"上帝视角"真值：由生成结构直接写入，不经过任何符号提取器。
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-// 基准工作目录：默认系统临时目录，可用 AISEARCH_BENCH_DIR 覆盖。
+
 const BENCH_ROOT = process.env.AISEARCH_BENCH_DIR || path.join(os.tmpdir(), "aisearch-bench");
 const CORPUS = path.join(BENCH_ROOT, "corpus");
 
-// ── 确定性 PRNG ─────────────────────────────────────
+
 function mulberry32(seed) {
   let a = seed >>> 0;
   return function () {
@@ -32,7 +32,7 @@ function mulberry32(seed) {
   };
 }
 
-// ── 词表（确定性组合）───────────────────────────────
+
 const VERBS = ["compute", "validate", "load", "flush", "merge", "parse", "render", "sync", "fetch", "pack", "scale", "route", "trace", "batch", "cache"];
 const NOUNS = ["alpha", "delta", "gamma", "vector", "matrix", "buffer", "stream", "packet", "signal", "ledger", "session", "channel", "segment", "payload", "cursor"];
 const CLASS_WORDS = ["Engine", "Worker", "Store", "Gateway", "Bridge", "Factory", "Router", "Keeper", "Handler", "Tracker"];
@@ -43,11 +43,11 @@ function snake(rng) { return pick(rng, VERBS) + "_" + pick(rng, NOUNS) + (rng() 
 function camel(rng) { const s = snake(rng); return s.replace(/_(\w)/g, (_, c) => c.toUpperCase()); }
 function pascal(rng) { const c = camel(rng); return c[0].toUpperCase() + c.slice(1); }
 
-// ── 种植 token（查询词）─────────────────────────────
-// 命中行数预算见 README 注释；真值由逐行 indexOf 独立扫描得出
+
+
 const TOKENS = ["process_data", "validate_config", "ZetaMatrixSync", "quantum_flux", "replay_buffer", "edge_case_TOKEN"];
 
-// ── 生成辅助：行缓冲 + 符号登记 ─────────────────────
+
 function make_file() {
   const lines = [];
   const symbols = [];
@@ -56,14 +56,14 @@ function make_file() {
     symbols,
     at() { return lines.length + 1; },
     push(s) { lines.push(s); },
-    // 记录一个符号（在 push 内容之后调用：start 是符号声明行，end 是当前最后一行）
+
     record(kind, name, startLine, parent = "") {
       symbols.push({ kind, name, line: startLine, line_end: lines.length });
     },
   };
 }
 
-// ── Python 文件 ─────────────────────────────────────
+
 function gen_py(idx, rng) {
   const f = make_file();
   const mod = snake(rng);
@@ -75,18 +75,18 @@ function gen_py(idx, rng) {
   f.push("import sys");
   f.push("");
 
-  // 顶层常量
+
   const const_name = snake(rng).toUpperCase();
   f.push(const_name + " = " + Math.floor(rng() * 900 + 100));
   f.push("");
 
-  // 种植：低频 token 常量
+
   if (idx % 23 === 0) {
     f.push('QUANTUM_FLUX_TAG = "quantum_flux"');
     f.push("");
   }
 
-  // 1-2 个模块级函数（其中部分多行签名）
+
   const n_funcs = 1 + Math.floor(rng() * 2);
   for (let i = 0; i < n_funcs; i++) {
     const fname = snake(rng);
@@ -100,7 +100,7 @@ function gen_py(idx, rng) {
       f.push(") -> dict:");
       f.push('    """Handle ' + fname + '."""');
       f.push("    result = {}");
-      // 种植调用行
+
       if (idx % 2 === 0 && i === 0) {
         f.push("    process_data(payload, mode)");
       }
@@ -123,7 +123,7 @@ function gen_py(idx, rng) {
     f.push("");
   }
 
-  // 1 个类（含 2-3 个方法，部分多行签名）
+
   const cname = pascal(rng);
   const cstart = f.at();
   f.push("class " + cname + ":");
@@ -135,7 +135,7 @@ function gen_py(idx, rng) {
   f.record("method", "__init__", f.at() - 3, cname);
   const n_methods = 2 + Math.floor(rng() * 2);
   for (let i = 0; i < n_methods; i++) {
-    if (i > 0) f.push(""); // 方法间空行（class record 前不留尾空行）
+    if (i > 0) f.push("");
     const mname = camel(rng);
     const start = f.at();
     const multiline = rng() < 0.3;
@@ -161,7 +161,7 @@ function gen_py(idx, rng) {
   }
   f.record("class", cname, cstart);
 
-  // 种植：类名 token（中频）
+
   if (idx % 8 === 0) {
     f.push("");
     const zstart = f.at();
@@ -173,13 +173,13 @@ function gen_py(idx, rng) {
     f.record("class", "ZetaMatrixSync" + idx, zstart);
   }
 
-  // 尾注释（不含 token，避免干扰行计数）
+
   f.push("");
   f.push("# end of " + mod);
   return { ext: ".py", file: f };
 }
 
-// ── TypeScript 文件 ─────────────────────────────────
+
 function gen_ts(idx, rng) {
   const f = make_file();
   const mod = camel(rng);
@@ -188,7 +188,7 @@ function gen_ts(idx, rng) {
   f.push('import { EventEmitter } from "events";');
   f.push("");
 
-  // interface
+
   const iname = "I" + pascal(rng);
   let start = f.at();
   f.push("export interface " + iname + " {");
@@ -198,7 +198,7 @@ function gen_ts(idx, rng) {
   f.push("}");
   f.record("interface", iname, start);
 
-  // enum
+
   const ename = pascal(rng) + "Mode";
   start = f.at();
   f.push("export enum " + ename + " {");
@@ -207,14 +207,14 @@ function gen_ts(idx, rng) {
   f.push("}");
   f.record("enum", ename, start);
 
-  // type
+
   const tname = pascal(rng) + "Map";
   start = f.at();
   f.push("export type " + tname + " = Record<string, number>;");
   f.record("type", tname, start);
   f.push("");
 
-  // 箭头函数 / const 函数
+
   const afname = camel(rng);
   start = f.at();
   f.push("export const " + afname + " = async (input: string): Promise<number> => {");
@@ -223,7 +223,7 @@ function gen_ts(idx, rng) {
   f.record("function", afname, start);
   f.push("");
 
-  // class（含方法简写 + 多行签名方法）
+
   const cname = pascal(rng);
   const cstart = f.at();
   f.push("export class " + cname + " extends EventEmitter {");
@@ -268,7 +268,7 @@ function gen_ts(idx, rng) {
   f.push("}");
   f.record("class", cname, cstart);
 
-  // 种植类名
+
   if (idx % 8 === 0) {
     f.push("");
     f.push("export class ZetaMatrixSync" + idx + " {");
@@ -279,7 +279,7 @@ function gen_ts(idx, rng) {
     f.record("class", "ZetaMatrixSync" + idx, f.at() - 5);
   }
 
-  // 稀疏 token
+
   if (idx % 17 === 0) {
     f.push("");
     f.push("export const replay_buffer = " + idx + ";");
@@ -290,7 +290,7 @@ function gen_ts(idx, rng) {
   return { ext: ".ts", file: f };
 }
 
-// ── Go 文件 ─────────────────────────────────────────
+
 function gen_go(idx, rng) {
   const f = make_file();
   const pkg = snake(rng).replace(/_/g, "");
@@ -303,7 +303,7 @@ function gen_go(idx, rng) {
   f.push(")");
   f.push("");
 
-  // struct
+
   const sname = pascal(rng);
   let start = f.at();
   f.push("type " + sname + " struct {");
@@ -312,7 +312,7 @@ function gen_go(idx, rng) {
   f.push("}");
   f.record("struct", sname, start);
 
-  // interface
+
   const iname = "I" + pascal(rng);
   start = f.at();
   f.push("type " + iname + " interface {");
@@ -321,7 +321,7 @@ function gen_go(idx, rng) {
   f.record("interface", iname, start);
   f.push("");
 
-  // 方法（接收器）
+
   const n_methods = 1 + Math.floor(rng() * 2);
   for (let i = 0; i < n_methods; i++) {
     const mname = pascal(rng);
@@ -338,7 +338,7 @@ function gen_go(idx, rng) {
     f.push("");
   }
 
-  // 函数（部分多行签名）
+
   const n_funcs = 1 + Math.floor(rng() * 2);
   for (let i = 0; i < n_funcs; i++) {
     const fname = pascal(rng);
@@ -369,7 +369,7 @@ function gen_go(idx, rng) {
     f.push("");
   }
 
-  // 种植类名
+
   if (idx % 8 === 0) {
     start = f.at();
     f.push("type ZetaMatrixSync" + idx + " struct {");
@@ -383,10 +383,10 @@ function gen_go(idx, rng) {
   return { ext: ".go", file: f };
 }
 
-// ── 主流程 ──────────────────────────────────────────
+
 function main() {
   fs.rmSync(BENCH_ROOT, { recursive: true, force: true });
-  fs.mkdirSync(path.join(CORPUS, ".git"), { recursive: true }); // 项目根 marker（rg/aisearch 识别）
+  fs.mkdirSync(path.join(CORPUS, ".git"), { recursive: true });
 
   const rng = mulberry32(20260917);
   const manifest = { seed: 20260917, files: {}, tokens: TOKENS };
@@ -414,7 +414,7 @@ function main() {
     }
   }
 
-  // edge_case_TOKEN：只在 2 个文件、固定行种植（低频边界查询）
+
   const edgeTargets = ["pysrc/gen_003_py.py", "tssrc/gen_041_ts.ts"];
   for (const rel of edgeTargets) {
     const full = path.join(CORPUS, rel);

@@ -11,7 +11,7 @@ from aisearch.config import safe_resolve
 from pathlib import Path
 
 
-# ── 参数健壮性 ──────────────────────────────────────
+
 
 @pytest.mark.parametrize("bad_limit", [-1, 0, -999, "abc", None, 1e9, float("inf")])
 def test_search_text_never_crashes_on_bad_limit(sample_root, bad_limit):
@@ -51,7 +51,7 @@ def test_tree_depth_clamped(sample_root):
     assert max_depth(tree["tree"]) <= engine.MAX_TREE_DEPTH + 1
 
 
-# ── 路径隔离 ────────────────────────────────────────
+
 
 @pytest.mark.parametrize("ref", [
     "/etc/passwd",
@@ -86,28 +86,28 @@ def test_get_context_traversal_blocked(sample_root):
     assert not res.ok
 
 
-# ── 大文件保护 ──────────────────────────────────────
+
 
 def test_large_file_streaming(tmp_path):
-    # 大文件不再硬拒：无范围时返回头部预览（truncated=True），给定范围可流式读取
+
     big = tmp_path / "big.py"
     big.write_text("x = 1\n" * (reader.MAX_FILE_BYTES // 6 + 2000))
     (tmp_path / "pyproject.toml").write_text("[project]\nname='t'\n")
 
-    # 无范围：头部预览，标记为 truncated
+
     res = reader.read_file("big.py", path=str(tmp_path))
     assert res.ok
     assert res.truncated is True
     assert res.total_lines > reader.MAX_FILE_BYTES // 6
     assert "x = 1" in res.content
 
-    # 给定行范围：按范围流式读取，不再报错
+
     res2 = reader.read_file("big.py:2-4", path=str(tmp_path))
     assert res2.ok
     assert res2.start == 2 and res2.end == 4
     assert "x = 1" in res2.content
 
-    # get_context 对大文件也应流式返回窗口
+
     res3 = reader.get_context("big.py", line=3, path=str(tmp_path))
     assert res3.ok
     assert "x = 1" in res3.content
@@ -121,7 +121,7 @@ def test_radius_clamped(tmp_path):
     assert res.ok
 
 
-# ── 第二轮重审修复 ──────────────────────────────────
+
 
 def _make_project(tmp_path):
     (tmp_path / "pyproject.toml").write_text("[project]\nname='t'\n")
@@ -173,10 +173,10 @@ def test_symbol_unique_partial_fallback(tmp_path):
     assert ok.ok and ok.symbol["name"] == "real_one"
 
     (root / "b.py").write_text("def dup_x():\n    pass\n\n\ndef dup_y():\n    pass\n")
-    # 文件 a.py 内 "_o" 唯一命中 real_one（other 不含 "_o"）
+
     ok2 = reader.read_file("a.py#_o", path=str(root))
     assert ok2.ok
-    # 构造同文件歧义：临时文件含两个含 "d" 的符号
+
     (root / "c.py").write_text("def da():\n    pass\n\n\ndef db():\n    pass\n")
     amb = reader.read_file("c.py#d", path=str(root))
     assert not amb.ok
@@ -198,7 +198,7 @@ def test_symbol_range_no_trailing_blank_lines(tmp_path):
     assert (s.line, s.line_end) == (1, 2)
 
 
-# ── rpc 无服务模式 ──────────────────────────────────
+
 
 def test_rpc_session_dispatch(sample_root):
     s = rpc.RpcSession(default_path=str(sample_root), boundary="root")

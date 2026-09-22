@@ -55,7 +55,7 @@ def test_find_symbol_by_name_partial():
 
 
 def test_find_containing_symbol():
-    sym = find_containing_symbol(PY, "python", 11)  # `return self.x` inside run()
+    sym = find_containing_symbol(PY, "python", 11)
     assert sym is not None
     assert sym.name == "run"
 

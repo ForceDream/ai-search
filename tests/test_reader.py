@@ -58,7 +58,7 @@ def test_get_context(sample_root):
     assert "os" in res.imports
 
 
-# ── 大文件 / 二进制 防护（回归：避免撑爆上下文与乱码）──
+
 
 def _mini_project(tmp_path):
     (tmp_path / "pyproject.toml").write_text("[project]\nname='t'\n")

@@ -23,17 +23,17 @@ import sys
 import time
 from pathlib import Path
 
-# 路径相对本脚本解析 + 环境变量可覆盖 → 不绑定任何机器/本地目录。
-HERE = Path(__file__).resolve().parent   # .../aisearch-js/bench
-JS_ROOT = HERE.parent                     # .../aisearch-js
-REPO_ROOT = JS_ROOT.parent                # 含 aisearch/ 与 aisearch-js/
 
-CORPUS = os.environ.get("AISEARCH_TOKEN_CORPUS", str(REPO_ROOT))  # 被读的代码库（所有方式统一）
-PY = os.environ.get("AISEARCH_PY_BIN", "aisearch").split()        # py console script
+HERE = Path(__file__).resolve().parent
+JS_ROOT = HERE.parent
+REPO_ROOT = JS_ROOT.parent
+
+CORPUS = os.environ.get("AISEARCH_TOKEN_CORPUS", str(REPO_ROOT))
+PY = os.environ.get("AISEARCH_PY_BIN", "aisearch").split()
 JS = [os.environ.get("NODE_BIN", "node"), str(JS_ROOT / "bin" / "aisearch.mjs")]
 
 
-# ── token 估算 ───────────────────────────────
+
 def est_tokens(text: str) -> int:
     cjk = 0
     other = 0
@@ -52,7 +52,7 @@ def norm_tokens(text: str) -> int:
     return est_tokens(_ELAPSED.sub(r"\g<1>0", text))
 
 
-# ── 执行器 ───────────────────────────────────
+
 def sh(cmd, cwd):
     t0 = time.time()
     p = subprocess.run(cmd, capture_output=True, text=True, timeout=60, cwd=cwd)
@@ -73,7 +73,7 @@ def run_cli(kind, steps, cwd):
     bin_ = PY if kind == "py" else JS
     outs = []
     for argv in steps:
-        # js 在自身目录启动，语料库路径用 PATH 占位符精确替换（可出现在任何位置）
+
         a = list(bin_) + [CORPUS if x == "PATH" else x for x in argv]
         out, dt = sh(a, cwd)
         outs.append((" ".join(argv), out, dt))
@@ -104,12 +104,12 @@ def measure(steps_out):
             "total": in_tok + out_tok, "elapsed_s": round(elapsed, 2)}
 
 
-# ── 任务定义 ─────────────────────────────────
-# 所有路径相对 CORPUS（js 版由 run_cli 把最后一个参数换成 CORPUS；
-# 注意：js 任务里 path 参数必须是最后一个位置参数）
+
+
+
 TASKS = {}
 
-# T1 定位并读取完整方法体：RpcSession.handle
+
 TASKS["T1 读方法体"] = {
     "grep": [
         r'grep -rn "def handle" aisearch/',
@@ -121,7 +121,7 @@ TASKS["T1 读方法体"] = {
     "js-rpc": [{"id": 1, "method": "read", "params": {"file": "aisearch/rpc.py#handle"}}],
 }
 
-# T2 文件大纲：config.py 顶层结构
+
 TASKS["T2 文件大纲"] = {
     "grep": [r'grep -n "^def \|^class \|^MAX\|^EXT\|^CODE" aisearch/config.py'],
     "py-cli": [["cat", "aisearch/config.py", "--outline"]],
@@ -130,7 +130,7 @@ TASKS["T2 文件大纲"] = {
     "js-rpc": [{"id": 1, "method": "read", "params": {"file": "aisearch/config.py", "outline": True}}],
 }
 
-# T3 查引用：find_containing_symbol 的使用点
+
 TASKS["T3 查引用"] = {
     "grep": [r'grep -rn "find_containing_symbol" aisearch/'],
     "py-cli": [["ref", "find_containing_symbol"]],
@@ -139,7 +139,7 @@ TASKS["T3 查引用"] = {
     "js-rpc": [{"id": 1, "method": "ref", "params": {"name": "find_containing_symbol"}}],
 }
 
-# T4 行上下文（两步：先拿行号，再看上下文）
+
 TASKS["T4 行上下文"] = {
     "grep": [
         r'grep -n "MAX_LINE_BYTES" aisearch/rpc.py',
@@ -153,7 +153,7 @@ TASKS["T4 行上下文"] = {
                {"id": 2, "method": "context", "params": {"file": "aisearch/rpc.py", "line": 209, "radius": 5}}],
 }
 
-# T5 找定义：extract_symbols
+
 TASKS["T5 找定义"] = {
     "grep": [r'grep -rn "def extract_symbols" aisearch/'],
     "py-cli": [["def", "extract_symbols"]],
@@ -162,7 +162,7 @@ TASKS["T5 找定义"] = {
     "js-rpc": [{"id": 1, "method": "def", "params": {"name": "extract_symbols"}}],
 }
 
-# T6 八步审计会话
+
 TASKS["T6 审计会话(8步)"] = {
     "grep": [
         r'find aisearch -name "*.py" | sort',
@@ -185,7 +185,7 @@ TASKS["T6 审计会话(8步)"] = {
         ["cat", "aisearch/rpc.py#_m_search"],
     ],
     "js-cli": [
-        ["tree", "PATH", "-d", "2"],  # tree 只有 1 个位置参数(path)，PATH 替换而非追加
+        ["tree", "PATH", "-d", "2"],
         ["grep", "MAX_PATTERN_LEN", "PATH"],
         ["sym", "search_text", "PATH"],
         ["cat", "aisearch/engine.py#search_text", "PATH"],
@@ -204,7 +204,7 @@ TASKS["T6 审计会话(8步)"] = {
         {"id": 7, "method": "symbols", "params": {"name": "_search_with_rg"}},
         {"id": 8, "method": "read", "params": {"file": "aisearch/rpc.py#_m_search"}},
     ],
-    "js-rpc": None,  # 与 py-rpc 相同，运行时填充
+    "js-rpc": None,
 }
 TASKS["T6 审计会话(8步)"]["js-rpc"] = TASKS["T6 审计会话(8步)"]["py-rpc"]
 
@@ -226,7 +226,7 @@ def main():
                 outs = run_rpc("js", steps, str(JS_ROOT))
             results[tname][way] = measure(outs)
 
-    # ── 输出 ──
+
     print("=" * 88)
     print(f"{'任务':<14}{'方式':<8}{'调用':>5}{'输入tok':>9}{'输出tok':>9}{'总tok':>8}{'耗时s':>8}")
     print("-" * 88)
@@ -236,7 +236,7 @@ def main():
             print(f"{tname:<14}{way:<8}{m['calls']:>5}{m['in_tok']:>9}{m['out_tok']:>9}{m['total']:>8}{m['elapsed_s']:>8}")
         print("-" * 88)
 
-    # 汇总
+
     print("\n== 汇总（T1-T6 总 token）==")
     summary = {}
     for way in ["grep", "py-cli", "js-cli", "py-rpc", "js-rpc"]:
@@ -249,7 +249,7 @@ def main():
         print(f"{way:<8} calls={tot_calls:>3}  in={tot_in:>5}  out={tot_out:>6}  total={tot_in+tot_out:>6}"
               f"  ({(tot_in+tot_out)/base*100:.0f}% of grep)")
 
-    # py vs js 专节
+
     print("\n== py vs js（token 逐项比）==")
     for tname in results:
         pc, jc = results[tname]["py-cli"]["total"], results[tname]["js-cli"]["total"]

@@ -1,18 +1,18 @@
-# aisearch universal installer - Windows (PowerShell)
-#
-# Installs the Python package at the repository root (editable) and checks the
-# zero-dependency Node port.
-#
-# Usage:
-#   powershell -ExecutionPolicy Bypass -File all\install.ps1
-#   powershell -ExecutionPolicy Bypass -File all\install.ps1 -Test
-#   powershell -ExecutionPolicy Bypass -File all\install.ps1 -Full -NoJs
-#   powershell -ExecutionPolicy Bypass -File all\install.ps1 -Skill       # project-level
-#   powershell -ExecutionPolicy Bypass -File all\install.ps1 -SkillUser   # user-level
-#
-# Env:
-#   $env:PYTHON = "py"                     # override the interpreter command
-#   $env:VENV = "1"                        # create .venv first, then install
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 [CmdletBinding()]
 param(
     [switch]$Test,
