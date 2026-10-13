@@ -40,6 +40,7 @@ def _clamp(value, default, lo, hi):
 
 
 class RpcSession:
+    """一次 rpc 会话：持有默认路径与边界策略。"""
 
     def __init__(self, default_path: str = ".", boundary: str = "system"):
         self.default_path = default_path
@@ -71,7 +72,26 @@ class RpcSession:
     def _path(self, params: dict) -> str:
         return params.get("path") or self.default_path
 
+    @staticmethod
+    def _count_only(params: dict, data: dict) -> dict:
+        """count_only=true：丢弃 matches 只留统计字段，定位型查询不回正文。"""
+        if not params.get("count_only"):
+            return data
+        return {k: v for k, v in data.items() if k != "matches"}
+
+    def _anchor(self) -> Path | None:
+        """读取类方法的根锚点：boundary=root 时以锁定的 root 为基准。"""
+        if self.boundary != "root":
+            return None
+        return Path(self.default_path).resolve()
+
     def _check_path(self, params: dict) -> str:
+        """
+        boundary=root 时校验查询路径锁定在本项目内，防止通过
+        path=/ 或 ../../ 越权枚举任意目录（search/symbols/def/ref/tree）。
+        校验 find_project_root 的结果：所有文件读取都发生在该 root 下，
+        它在界内则整个查询面在界内。
+        """
         p = self._path(params)
         if self.boundary == "root":
             base = Path(self.default_path).resolve()
@@ -102,10 +122,11 @@ class RpcSession:
             case_insensitive=bool(params.get("ignore_case", False)),
             max_results=params.get("limit", 50),
             whole_word=bool(params.get("whole_word", False)),
+            offset=_clamp(params.get("offset", 0), 0, 0, 10**9),
         )
         if not resp.ok:
             raise ValueError(resp.error)
-        return resp.to_dict()["data"]
+        return self._count_only(params, resp.to_dict()["data"])
 
     def _m_symbols(self, params: dict) -> dict:
         name = params.get("name", "")
@@ -118,7 +139,7 @@ class RpcSession:
             max_results=params.get("limit", 50),
             partial=bool(params.get("partial", True)),
         )
-        return resp.to_dict()["data"]
+        return self._count_only(params, resp.to_dict()["data"])
 
     def _m_def(self, params: dict) -> dict:
         name = params.get("name", "")
@@ -130,7 +151,7 @@ class RpcSession:
             max_results=params.get("limit", 50),
             substring_fallback=bool(params.get("substring_fallback", True)),
         )
-        return resp.to_dict()["data"]
+        return self._count_only(params, resp.to_dict()["data"])
 
     def _m_ref(self, params: dict) -> dict:
         name = params.get("name", "")
@@ -140,10 +161,11 @@ class RpcSession:
             name=name,
             path=self._check_path(params),
             max_results=params.get("limit", 100),
+            offset=_clamp(params.get("offset", 0), 0, 0, 10**9),
         )
         if not resp.ok:
             raise ValueError(resp.error)
-        return resp.to_dict()["data"]
+        return self._count_only(params, resp.to_dict()["data"])
 
     def _m_read(self, params: dict) -> dict:
         file_ref = params.get("file", "")
@@ -154,6 +176,7 @@ class RpcSession:
             path=self._path(params),
             outline_only=bool(params.get("outline", False)),
             boundary=self.boundary,
+            anchor=self._anchor(),
         )
         if not result.ok:
             raise ValueError(result.error)
@@ -170,6 +193,7 @@ class RpcSession:
             path=self._path(params),
             radius=_clamp(params.get("radius", 5), 5, 0, 200),
             boundary=self.boundary,
+            anchor=self._anchor(),
         )
         if not result.ok:
             raise ValueError(result.error)
@@ -183,6 +207,10 @@ class RpcSession:
 
 
 def run_rpc(root: str | None = None):
+    """
+    运行 stdio 循环。root 非空时锁定项目根并启用 boundary=root；
+    否则以 cwd 为默认路径，boundary=system（与 CLI 同级信任）。
+    """
 
 
     try:

@@ -31,7 +31,7 @@ user-invocable: true
 命令里的 `<SKILL_DIR>` 指**本技能目录**，取决于安装方式：
 
 - SkillHub / 放进 skills 目录：`~/.codebuddy/skills/aisearch`（发布版写作 `${CODEBUDDY_SKILL_DIR}`）
-- 插件安装（`code-search-tools@baozi-tools`）：`<插件根>/skills/aisearch`，插件根用 `${CODEBUDDY_PLUGIN_ROOT}` 取，或用 `codebuddy plugin list` 查
+- 插件安装：`<插件根>/skills/aisearch`，插件根用 `${CODEBUDDY_PLUGIN_ROOT}` 取，或用 `codebuddy plugin list` 查
 
 ## 什么时候用我（触发词）
 
@@ -49,13 +49,13 @@ python "<SKILL_DIR>/scripts/aisearch_rpc.py" --root . def '{"name":"<符号名>"
 
 | 任务 | 用什么 | 为什么 |
 |---|---|---|
-| 纯文本 / 正则定位 | **自带 Grep**（ripgrep） | 最快（~2s vs 本工具 4.5s），自动忽略 node_modules |
-| 符号问答：定义在哪 / **谁调用（callers）** / **影响面（impact）** / **枢纽榜（hubs）** / **按任务关键词找码（for）** / 歧义展开 | **repo-context**（持久索引） | `index` 一次秒级（实测 3.1s / 367 文件），之后每条查询 <0.3s；callers / impact / hubs 是本工具与 Grep 都没有的能力 |
+| 纯文本 / 正则定位 | **本工具** `search`（`--format text` 省 token、`count_only` 只要行号、`offset` 翻页） | 结构化定位（`file`/`line`/`col`/符号名）比裸 grep 可复核；单进程常驻、可批量 `--stdin` |
+| 符号问答：定义在哪 / **谁调用（callers）** / **影响面（impact）** / **枢纽榜（hubs）** / **按任务关键词找码（for）** / 歧义展开 | **repo-context**（持久索引） | `index` 一次秒级（实测 1.3s / 340 文件），之后每条查询 <0.3s；callers / impact / hubs 是本工具没有的能力 |
 | 读函数体 / 行归属（**含 Rust**，返回 `containing_symbol`）/ 批量精读 | **本工具** `read file#符号` / `context` | O(单文件)，实测 9 请求共 0.5s（含 Rust 3 请求 0.4s）；输出 metadata 前置、`content` 殿后 |
 | 大文件（>200k 字符） | **本工具** 行范围读取 | 有截断保护，不会把大文件全量拉进上下文 |
-| 结构化符号感知搜索 | 本工具 `search` / `symbols` | 输出结构化 JSON；**仅限小项目**，大项目首轮定位交给上面两行 |
+| 结构化符号感知搜索 | 本工具 `search` / `symbols` | 输出结构化 JSON 与符号类型；大项目首轮定位交给 repo-context 的 `for` / `hubs` |
 
-一句话：**先定位（Grep / repo-context），再精读（本工具）**；不要用本工具的 `search` 做大项目的首轮定位。
+一句话：**先定位（本工具 `search` 或 repo-context），再精读（`read file#符号` / `context`）**。若本机没有本工具（或需语义级符号导航），才退回系统 grep，并说明原因。
 
 ## 调用
 
@@ -79,18 +79,28 @@ Get-Content "<SKILL_DIR>\assets\requests\basic.jsonl" | python "<SKILL_DIR>\scri
 ```
 
 - `--pretty` 缩进输出，便于阅读；默认每行一个紧凑 JSON。
+- `--format text` 纯文本渲染（默认 json）：grep 风格 `file:line:text`，免 JSON 转义，read/search 类输出 token 约省一半；Agent 输出量大时优先用它。
 - 技能目录含空格时，`--tool` 中的可执行文件路径本身要再包一层引号。
 - 命令探测顺序：`--tool` > 环境变量 `AISEARCH_CMD` > PATH 上的 `aisearch`（若你已 pip 装过）> 本技能自带的 Python 实现。
 - 复杂 params 建议走 `--stdin`，避免各 shell 的引号规则差异。
+
+## Token 省法（Agent 必读）
+
+1. **能批量就批量**：一次 `--stdin` 会话发多个请求（每行一个 JSON），进程启动与 hook 往返只付一次。
+2. **按行段 / 按符号读**：`file:10-50` 行段、`file#符号` 完整实现，不要整文件读。
+3. **定位型查询关掉正文**：只要行号不要代码时用 `count_only:true`（search/ref/symbols/def），或 `search` 传 `context:0`（默认带 2 行上下文）。
+4. **大结果集翻页**：响应带 `next_offset` 时，把它的值当 `offset` 续读，不要盲目拉大 `limit`。
+5. **输出量大用 `--format text`**：免 JSON 转义膨胀（见「调用」节）。
+6. **不重复读**：同一文件/行段本轮会话已读过就不再发起相同请求；重读前先确认文件是否真的变过。
 
 ## 方法
 
 | method | params | 用途 |
 |---|---|---|
-| `search` | `pattern`(必), `path?, context?, limit?, ignore_case?, whole_word?, extensions?` | 文本搜索（替代 grep） |
-| `symbols` | `name`(必), `path?, kind?, limit?, partial?` | 符号搜索（子串匹配） |
-| `def` | `name`(必), `path?, limit?, substring_fallback?=true` | 查找定义：exact 优先，候选全部来自定义正则（`match_mode:"exact"`）；无命中回退子串并标 `match_mode:"substring"`（候选需核对；`substring_fallback:false` 可关闭） |
-| `ref` | `name`(必), `path?, limit?` | 查找引用（全词匹配的使用位置） |
+| `search` | `pattern`(必), `path?, context?, limit?, ignore_case?, whole_word?, extensions?, offset?=0, count_only?` | 文本搜索（替代 grep）；`offset` 分页，池里还有剩余时响应带 `next_offset`（继续带它当 `offset` 翻页）；`count_only:true` 只回统计不回正文 |
+| `symbols` | `name`(必), `path?, kind?, limit?, partial?, count_only?` | 符号搜索（子串匹配） |
+| `def` | `name`(必), `path?, limit?, substring_fallback?=true, count_only?` | 查找定义：exact 优先，候选全部来自定义正则（`match_mode:"exact"`）；无命中回退子串并标 `match_mode:"substring"`（候选需核对；`substring_fallback:false` 可关闭） |
+| `ref` | `name`(必), `path?, limit?, offset?=0, count_only?` | 查找引用（全词匹配的使用位置，支持 `offset` 分页） |
 | `read` | `file`(必), `path?, outline?` | 读文件（整文件 / 行范围 / 按符号） |
 | `context` | `file`(必), `line`(必), `radius?, path?` | 某行的语义上下文（所属函数、导入等） |
 | `tree` | `path?, depth?` | 项目目录树 |
@@ -119,6 +129,8 @@ Get-Content "<SKILL_DIR>\assets\requests\basic.jsonl" | python "<SKILL_DIR>\scri
 - 单次结果 ≤ 5000 条、上下文行数 ≤ 200、目录树深度 ≤ 16、搜索模式 ≤ 256 字符。
 - 文本文件 > 5MB 走流式：无范围时只返回头部预览并置 `truncated: true`。
 - 无 BOM 且含 NUL 的文件判为二进制，返回 `ok:false, "Binary file (...); not text"` —— **不要重试**，改用文本源文件。
+- **默认不搜**：隐藏文件/目录（点开头）与 `.gitignore` 列出的路径 —— 与 rg 默认一致；结果里的 `skipped` 是被跳过的文件数。需要搜隐藏目录时直接把 `path` 指到它。
+- 无 ripgrep 的回退引擎跳过 > 32MB 的文件（rg 流式无此限制），并在响应里给 `skipped`。
 
 ## 何时不要用
 
@@ -142,7 +154,7 @@ Get-Content "<SKILL_DIR>\assets\requests\basic.jsonl" | python "<SKILL_DIR>\scri
 **其他常见疑问**：
 
 - `def` 返回多条候选？→ 同名多定义；`match_mode` 为 `substring` 表示这是回退的模糊匹配，**必须核对**后再用。
-- 搜不到中文标识符？→ 编码自动探测（UTF-8 / GB18030），正常可搜；中文乱码只出现在未走探测的老边界，属已知限制。
+- 搜不到中文标识符？→ **搜索与读取统一按探测到的编码处理（UTF-8 / GB18030）**，中文标识符可正常搜到；1.0.1 起搜索路径不再硬编码 UTF-8（旧版会"读正常、搜乱码"）。
 - 凭什么说比 `grep` 省 token？→ 只回结构化片段（`file`/`line`/`line_end`/`text`）而非全部命中行；实测高频词场景输出体积约为 `grep -rn` 的 **1/15**。
 - 需要跨机器/跨语言一致行为？→ Python 与 Node 两套实现**逐字段一致**，仅 rpc 的 `elapsed_ms` 与空白不同。
 - rpc 常驻会话为什么第二次 `search` 还是慢？→ 常驻省的只是**进程启动**；`search` / `def` / `ref` / `symbols` 每次都是全量扫描（无索引缓存）。大项目请改用 repo-context（持久索引，问答毫秒级），或先 Grep 定位、再用本工具 `read` / `context` 精读。

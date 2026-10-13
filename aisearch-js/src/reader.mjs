@@ -1,11 +1,5 @@
 
 
-
-
-
-
-
-
 import fs from "node:fs";
 import path from "node:path";
 
@@ -26,7 +20,7 @@ import {
   iter_symbol_decls,
   symbol_to_dict,
 } from "./symbols.mjs";
-import { PyValueError, py_int, splitLines } from "./util.mjs";
+import { PyValueError, abs_path, py_int, splitLines } from "./util.mjs";
 
 
 export const MAX_FILE_BYTES = 5 * 1024 * 1024;
@@ -42,14 +36,14 @@ export const MAX_CONTENT_CHARS = 200_000;
 
 
 export function _cap_content(text) {
-  
+
   if (text.length <= MAX_CONTENT_CHARS) return [text, false];
   return [text.slice(0, MAX_CONTENT_CHARS), true];
 }
 
 
 export function _is_binary(full) {
-  
+
   let fd;
   try {
     fd = fs.openSync(full, "r");
@@ -144,7 +138,7 @@ function file_nf_error(root, full) {
         msg += ` (looks double-prefixed with the root's last segment '${parts[0]}/'; try file "${parts.slice(1).join('/')}")`;
       }
     }
-  } catch {  }
+  } catch { }
   return msg;
 }
 
@@ -168,7 +162,7 @@ function fail_ctx(error, extra = {}) {
 
 
 function* iter_lines_sync(p, encoding) {
-  
+
   const fd = fs.openSync(p, "r");
   try {
     const CHUNK = 1 << 20;
@@ -258,13 +252,6 @@ function scan_decls_stream(p, encoding, lang) {
 
 
 export function _resolve_path(file_ref, root, boundary = "root") {
-  
-
-
-
-
-
-
 
 
   try {
@@ -426,13 +413,9 @@ function read_symbol_large(full, rel, lang, symbol_name, encoding, human = false
 }
 
 
-export function read_file(file_ref, path_arg = ".", outline_only = false, boundary = "root", human = false) {
-  
+export function read_file(file_ref, path_arg = ".", outline_only = false, boundary = "root", human = false, anchor = null) {
 
-
-
-
-  const root = find_project_root(path_arg);
+  const root = anchor ? abs_path(anchor) : find_project_root(path_arg);
   let full, start_line, end_line, symbol_name;
   try {
     [full, start_line, end_line, symbol_name] = _resolve_path(file_ref, root, boundary);
@@ -576,9 +559,9 @@ export function read_file(file_ref, path_arg = ".", outline_only = false, bounda
 
 
 
-export function get_context(file_ref, line, path_arg = ".", radius = 5, boundary = "root", human = false) {
-  
-  const root = find_project_root(path_arg);
+export function get_context(file_ref, line, path_arg = ".", radius = 5, boundary = "root", human = false, anchor = null) {
+
+  const root = anchor ? abs_path(anchor) : find_project_root(path_arg);
 
 
 

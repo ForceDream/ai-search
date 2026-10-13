@@ -1,8 +1,5 @@
 
 
-
-
-
 import { count_char, lstrip, rstrip } from "./util.mjs";
 import { detect_lang } from "./config.mjs";
 
@@ -168,7 +165,7 @@ function _get_compiled(lang) {
 export const MAX_SYMBOLS_PER_FILE = 5000;
 
 export function extract_symbols(lines, lang, file_path = "") {
-  
+
   const compiled = _get_compiled(lang);
   if (!compiled.length) return [];
 
@@ -215,9 +212,6 @@ export function extract_symbols(lines, lang, file_path = "") {
 
 
 export function iter_symbol_decls(lineIter, lang) {
-  
-
-
 
   const compiled = _get_compiled(lang);
   if (!compiled.length) return [];
@@ -253,8 +247,6 @@ export function iter_symbol_decls(lineIter, lang) {
 
 
 export function compute_symbol_end_from_chunk(chunk, lang, sym) {
-  
-
 
   const temp = make_symbol(sym.kind, sym.name, 1, sym.indent);
   _calc_ranges([temp], chunk, lang);
@@ -263,7 +255,7 @@ export function compute_symbol_end_from_chunk(chunk, lang, sym) {
 
 
 export function _calc_ranges(symbols, lines, lang) {
-  
+
   if (!symbols.length) return;
 
   const brace_langs = new Set([
@@ -382,7 +374,7 @@ export function _calc_ranges(symbols, lines, lang) {
 
 
 export function find_symbol_by_name(lines, lang, name, partial = false) {
-  
+
   const syms = extract_symbols(lines, lang);
   for (const s of syms) {
     if (partial) {
@@ -399,7 +391,7 @@ export function find_symbol_by_name(lines, lang, name, partial = false) {
 
 
 export function find_containing_symbol(lines, lang, target_line) {
-  
+
   const syms = extract_symbols(lines, lang);
   let best = null;
   let best_size = Infinity;
@@ -418,7 +410,7 @@ export function find_containing_symbol(lines, lang, target_line) {
 
 
 export function extract_imports(lines, lang) {
-  
+
   const imports = [];
 
 

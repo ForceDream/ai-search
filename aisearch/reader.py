@@ -36,6 +36,9 @@ SYMBOL_SCAN_CAP = 200_000
 
 
 def _file_nf_error(root: Path, full: Path) -> str:
+    """File not found 的可行动提示：file 里重复带了 root 最后一级目录名
+    （如 --root=.../my-project/src 却传 src/app.py，双写 src/）
+    是高频误用——给出建议路径而不是只报 not found。"""
     msg = f"File not found: {full}"
     try:
         rel = full.relative_to(root)
@@ -54,12 +57,14 @@ MAX_CONTENT_CHARS = 200_000
 
 
 def _cap_content(text: str) -> tuple[str, bool]:
+    """截断过长的正文，返回 (正文, 是否被截断)。"""
     if len(text) <= MAX_CONTENT_CHARS:
         return text, False
     return text[:MAX_CONTENT_CHARS], True
 
 
 def _is_binary(full: Path) -> bool:
+    """无 BOM 且头部含 NUL 字节 → 视为二进制，避免按文本读出乱码。"""
     try:
         with open(full, "rb") as f:
             head = f.read(8192)
@@ -194,6 +199,7 @@ class ContextResult:
 
 
 def _iter_lines(path: Path, encoding: str) -> Iterator[str]:
+    """按行流式产出（不含行终止符），避免整文件载入内存。"""
     with open(path, "rb") as fb:
         with io.TextIOWrapper(
             io.BufferedReader(fb), encoding=encoding, errors="replace", newline=""
@@ -207,6 +213,7 @@ def _iter_lines(path: Path, encoding: str) -> Iterator[str]:
 
 
 def _stream_read_range(path: Path, encoding: str, start: int, end: int) -> str:
+    """流式读取 [start, end] 行（1-based，闭区间），只保留该区间，O(范围) 内存。"""
     out: list[str] = []
     for i, ln in enumerate(_iter_lines(path, encoding), start=1):
         if i < start:
@@ -222,6 +229,7 @@ def _stream_count_lines(path: Path, encoding: str) -> int:
 
 
 def _stream_head(path: Path, encoding: str, preview: int) -> tuple[str, int, bool]:
+    """返回（头部文本, 总行数, 是否被截断）。"""
     keep: list[str] = []
     total = 0
     for ln in _iter_lines(path, encoding):
@@ -232,6 +240,7 @@ def _stream_head(path: Path, encoding: str, preview: int) -> tuple[str, int, boo
 
 
 def _stream_read_chunk(path: Path, encoding: str, start_line: int, cap: int) -> list[str]:
+    """从 start_line 起读取最多 cap 行，用于推算单个符号的范围。"""
     out: list[str] = []
     for i, ln in enumerate(_iter_lines(path, encoding), start=1):
         if i < start_line:
@@ -243,6 +252,7 @@ def _stream_read_chunk(path: Path, encoding: str, start_line: int, cap: int) -> 
 
 
 def _scan_decls_stream(path: Path, encoding: str, lang: Optional[str]) -> list[Symbol]:
+    """流式扫描符号声明（含行号，不含范围）。"""
     if not lang:
         return []
 
@@ -260,6 +270,15 @@ def _resolve_path(
     root: Path,
     boundary: str = "root",
 ) -> tuple[Path, Optional[int], Optional[int], Optional[str]]:
+    """
+    解析多种文件引用格式：
+      path/to/file.py
+      path/to/file.py:10-50
+      path/to/file.py:42
+      path/to/file.py#symbol_name
+
+    若整个引用本身就是一个存在的文件（文件名含 # 或 : 的场景），直接按普通路径处理。
+    """
 
     try:
         as_whole = safe_resolve(file_ref, root, boundary=boundary)
@@ -317,6 +336,7 @@ def _read_symbol_from_lines(
     lines: list[str], rel: str, lang: Optional[str], symbol_name: str, total: int,
     human: bool = False,
 ) -> ReadResult:
+    """中小文件：在已载入的行上做符号解析（原逻辑）。"""
     syms = extract_symbols(lines, lang, rel) if lang else []
     sym = None
     if lang:
@@ -356,6 +376,7 @@ def _read_symbol_large(
     full: Path, rel: str, lang: Optional[str], symbol_name: str, encoding: str,
     human: bool = False,
 ) -> ReadResult:
+    """大文件：流式扫描声明 → 定位目标 → 流式推算范围与内容。"""
     if not lang:
         return ReadResult(ok=False, file=rel, error=f"Symbol '{symbol_name}' not found (no language)")
     decls = _scan_decls_stream(full, encoding, lang)
@@ -400,8 +421,17 @@ def read_file(
     outline_only: bool = False,
     boundary: str = "root",
     human: bool = False,
+    anchor: Optional[Path] = None,
 ) -> ReadResult:
-    root = find_project_root(path)
+    """
+    读取文件，支持多种引用格式。
+    outline_only=True 时只返回符号大纲，不返回内容。
+    boundary="root" 时限制在项目根目录内；"system" 允许任意路径。
+    anchor 非空时以其为根（相对引用与越权校验都按它算；rpc --root 锁定时传入）。
+    human=True 时按符号读取会附带整文件符号大纲（供人/文本渲染）；
+    AI（rpc）保持 False，省去人类专属的大纲上下文与 token。
+    """
+    root = anchor if anchor is not None else find_project_root(path)
     try:
         full, start_line, end_line, symbol_name = _resolve_path(file_ref, root, boundary=boundary)
     except ValueError as e:
@@ -524,8 +554,14 @@ def get_context(
     radius: int = 5,
     boundary: str = "root",
     human: bool = False,
+    anchor: Optional[Path] = None,
 ) -> ContextResult:
-    root = find_project_root(path)
+    """
+    获取某一行的丰富上下文。
+    anchor 语义同 read_file：rpc --root 锁定时以其为根，不再向上找项目标记目录。
+    human=True 时附带整文件符号大纲（供人/文本渲染）；AI（rpc）保持 False。
+    """
+    root = anchor if anchor is not None else find_project_root(path)
 
 
 

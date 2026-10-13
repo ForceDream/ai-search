@@ -1,8 +1,5 @@
 
 
-
-
-
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -10,18 +7,31 @@ import { performance } from "node:perf_hooks";
 
 import {
   DEFAULT_IGNORE,
+  MAX_SEARCH_BYTES,
   build_file_list,
   decode_buffer,
   detect_lang,
   find_project_root,
   is_relative_to,
   load_extra_ignore,
+  load_vcs_ignore,
+  looks_binary,
   should_ignore,
 } from "./config.mjs";
 import { extract_symbols, find_containing_symbol, symbol_to_dict } from "./symbols.mjs";
 import { abs_path, escape_regex, rstrip, rstrip_nl, round1, safe_int, splitLines } from "./util.mjs";
 
 
+
+function _skip_reason(full) {
+
+  try {
+    if (fs.statSync(full).size > MAX_SEARCH_BYTES) return "size";
+  } catch {
+    return "stat";
+  }
+  return looks_binary(full) ? "binary" : "";
+}
 
 export function match_to_dict(m) {
   const d = {
@@ -37,10 +47,6 @@ export function match_to_dict(m) {
 }
 
 function _byte_offset_to_col(text, byteOff) {
-  
-
-
-
 
   if (byteOff <= 0) return 0;
   let acc = 0;
@@ -69,15 +75,17 @@ function fail_response(error) {
 
 export function search_response_to_dict(r) {
   if (!r.ok) return { ok: false, error: r.error };
-  return {
-    ok: true,
-    data: {
-      matches: r.matches.map(match_to_dict),
-      total: r.total,
-      files_searched: r.files_searched,
-      elapsed_ms: round1(r.elapsed_ms),
-    },
+  const data = {
+    matches: r.matches.map(match_to_dict),
+    total: r.total,
+    files_searched: r.files_searched,
+    elapsed_ms: round1(r.elapsed_ms),
   };
+  if (r.next_offset !== undefined && r.next_offset !== null) {
+    data.next_offset = r.next_offset;
+  }
+  if (r.skipped) data.skipped = r.skipped;
+  return { ok: true, data };
 }
 
 export function symbol_match_to_dict(m) {
@@ -96,6 +104,7 @@ export function symbol_response_to_dict(r) {
     elapsed_ms: round1(r.elapsed_ms),
   };
   if (r.match_mode) data.match_mode = r.match_mode;
+  if (r.skipped) data.skipped = r.skipped;
   return { ok: true, data };
 }
 
@@ -137,6 +146,7 @@ export function has_ripgrep() {
 export function _search_with_rg(
   pattern, root, scope, extensions, ignore,
   context_lines, case_insensitive, max_results, whole_word, literal = false,
+  offset = 0,
 ) {
   const t0 = performance.now();
   const cmd = [
@@ -258,16 +268,17 @@ export function _search_with_rg(
 
   attachContext();
 
-
-  const truncated = matches.slice(0, max_results);
+  const window = matches.slice(offset, offset + max_results);
+  const has_more = matches.length > offset + max_results;
 
   const elapsed = performance.now() - t0;
   return {
     ok: true,
-    matches: truncated,
-    total: truncated.length,
+    matches: window,
+    total: window.length,
     files_searched: files_searched.size,
     elapsed_ms: elapsed,
+    next_offset: has_more ? offset + window.length : null,
     error: "",
   };
 }
@@ -292,10 +303,6 @@ function _rel_path(full, root) {
 
 
 export function _resolve_scope(path_arg, root) {
-  
-
-
-
 
   let p;
   try {
@@ -321,6 +328,7 @@ export function _resolve_scope(path_arg, root) {
 export function _search_with_regex(
   pattern, root, scope, extensions, ignore,
   context_lines, case_insensitive, max_results, whole_word, literal = false,
+  offset = 0,
 ) {
   const t0 = performance.now();
 
@@ -373,11 +381,17 @@ export function _search_with_regex(
 
   const matches = [];
   let files_searched = 0;
+  let skipped = 0;
+  const stop = offset + max_results + 1;
 
   outer:
   for (const fname of names) {
     const full = path.join(base, fname);
     const fpath = prefix ? path.join(prefix, fname) : fname;
+    if (_skip_reason(full)) {
+      skipped += 1;
+      continue;
+    }
     let text;
     try {
       text = decode_buffer(fs.readFileSync(full));
@@ -402,18 +416,22 @@ export function _search_with_regex(
         match.context_before = cb;
         match.context_after = ca;
         matches.push(match);
-        if (matches.length >= max_results) break outer;
+        if (matches.length >= stop) break outer;
       }
     }
   }
 
+  const window = matches.slice(offset, offset + max_results);
+  const has_more = matches.length > offset + max_results;
   const elapsed = performance.now() - t0;
   return {
     ok: true,
-    matches,
-    total: matches.length,
+    matches: window,
+    total: window.length,
     files_searched,
     elapsed_ms: elapsed,
+    next_offset: has_more ? offset + window.length : null,
+    skipped,
     error: "",
   };
 }
@@ -431,6 +449,7 @@ export function search_text(
   whole_word = false,
   extra_ignore = null,
   literal = false,
+  offset = 0,
 ) {
   const root = find_project_root(path_arg);
   const scope = _resolve_scope(path_arg, root);
@@ -450,16 +469,19 @@ export function search_text(
 
   context_lines = safe_int(context_lines, 2, 0, MAX_CONTEXT_LINES);
   max_results = safe_int(max_results, 50, 1, MAX_RESULTS_CAP);
+  offset = safe_int(offset, 0, 0, 1e9);
 
   if (has_ripgrep()) {
+
     return _search_with_rg(
       String(pattern), root, scope, extensions, ignore,
-      context_lines, case_insensitive, max_results, whole_word, literal,
+      context_lines, case_insensitive, max_results, whole_word, literal, offset,
     );
   }
+
   return _search_with_regex(
-    String(pattern), root, scope, extensions, ignore,
-    context_lines, case_insensitive, max_results, whole_word, literal,
+    String(pattern), root, scope, extensions, [...ignore, ...load_vcs_ignore(root)],
+    context_lines, case_insensitive, max_results, whole_word, literal, offset,
   );
 }
 
@@ -467,13 +489,11 @@ export function search_text(
 
 
 function _resolve_scan_scope(path_arg, extra_ignore) {
-  
-
-
 
   const root = find_project_root(path_arg);
   const scope = _resolve_scope(path_arg, root);
-  const ignore = [...DEFAULT_IGNORE, ...(extra_ignore ?? []), ...load_extra_ignore(root)];
+
+  const ignore = [...DEFAULT_IGNORE, ...(extra_ignore ?? []), ...load_extra_ignore(root), ...load_vcs_ignore(root)];
   let base = root;
   let prefix = "";
   let names = build_file_list(root, null, ignore);
@@ -508,10 +528,6 @@ export function search_symbols(
   extra_ignore = null,
   partial = true,
 ) {
-  
-
-
-
 
   const needle = partial ? name.toLowerCase() : null;
   const t0 = performance.now();
@@ -520,6 +536,7 @@ export function search_symbols(
 
   const matches = [];
   let searched = 0;
+  let skipped = 0;
 
   for (const fname of names) {
     const fpath = prefix ? path.join(prefix, fname) : fname;
@@ -527,6 +544,10 @@ export function search_symbols(
     if (!lang) continue;
 
     const full = path.join(base, fname);
+    if (_skip_reason(full)) {
+      skipped += 1;
+      continue;
+    }
     let lines;
     try {
       lines = splitLines(decode_buffer(fs.readFileSync(full)));
@@ -558,6 +579,7 @@ export function search_symbols(
     total: matches.length,
     files_searched: searched,
     elapsed_ms: elapsed,
+    skipped,
     error: "",
   };
 }
@@ -566,12 +588,6 @@ export function search_symbols(
 
 
 export function find_definition(name, path_arg = ".", extra_ignore = null, max_results = 50, substring_fallback = true) {
-  
-
-
-
-
-
 
   const priority = {
     class: 0, struct: 0, interface: 0, trait: 0,
@@ -588,12 +604,17 @@ export function find_definition(name, path_arg = ".", extra_ignore = null, max_r
   const exact = [];
   const sub = [];
   let searched = 0;
+  let skipped = 0;
 
   for (const fname of names) {
     const fpath = prefix ? path.join(prefix, fname) : fname;
     const lang = detect_lang(fpath);
     if (!lang) continue;
     const full = path.join(base, fname);
+    if (_skip_reason(full)) {
+      skipped += 1;
+      continue;
+    }
     let lines;
     try {
       lines = splitLines(decode_buffer(fs.readFileSync(full)));
@@ -641,6 +662,7 @@ export function find_definition(name, path_arg = ".", extra_ignore = null, max_r
     total: matches.length,
     files_searched: searched,
     elapsed_ms: performance.now() - t0,
+    skipped,
     error: "",
     match_mode: mode,
   };
@@ -649,8 +671,8 @@ export function find_definition(name, path_arg = ".", extra_ignore = null, max_r
 
 
 
-export function find_references(name, path_arg = ".", max_results = 100, extra_ignore = null) {
-  
+export function find_references(name, path_arg = ".", max_results = 100, extra_ignore = null, offset = 0) {
+
 
 
   return search_text(
@@ -663,6 +685,7 @@ export function find_references(name, path_arg = ".", max_results = 100, extra_i
     true,
     extra_ignore,
     true,
+    offset,
   );
 }
 

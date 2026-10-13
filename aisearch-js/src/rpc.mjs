@@ -1,18 +1,5 @@
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 import path from "node:path";
 
 
@@ -28,7 +15,7 @@ export const METHODS = ["search", "symbols", "def", "ref", "read", "context", "t
 
 
 export class RpcSession {
-  
+
   constructor(default_path = ".", boundary = "system") {
     this.default_path = default_path;
     this.boundary = boundary;
@@ -85,11 +72,20 @@ export class RpcSession {
     return params.path || this.default_path;
   }
 
+  _count_only(params, data) {
+
+    if (!params.count_only) return data;
+    const out = { ...data };
+    delete out.matches;
+    return out;
+  }
+
+  _anchor() {
+
+    return this.boundary === "root" ? abs_path(this.default_path) : null;
+  }
+
   _checkPath(params) {
-    
-
-
-
 
     const p = this._path(params);
     if (this.boundary === "root") {
@@ -132,9 +128,12 @@ export class RpcSession {
       Boolean(params.ignore_case),
       params.limit ?? 50,
       Boolean(params.whole_word),
+      null,
+      false,
+      safe_int(params.offset ?? 0, 0, 0, 1e9),
     );
     if (!resp.ok) throw new PyValueError(resp.error);
-    return engine.search_response_to_dict(resp).data;
+    return this._count_only(params, engine.search_response_to_dict(resp).data);
   }
 
   _m_symbols(params) {
@@ -148,7 +147,7 @@ export class RpcSession {
       null,
       params.partial === undefined ? true : Boolean(params.partial),
     );
-    return engine.symbol_response_to_dict(resp).data;
+    return this._count_only(params, engine.symbol_response_to_dict(resp).data);
   }
 
   _m_def(params) {
@@ -161,7 +160,7 @@ export class RpcSession {
       params.limit ?? 50,
       params.substring_fallback === undefined ? true : Boolean(params.substring_fallback),
     );
-    return engine.symbol_response_to_dict(resp).data;
+    return this._count_only(params, engine.symbol_response_to_dict(resp).data);
   }
 
   _m_ref(params) {
@@ -171,9 +170,11 @@ export class RpcSession {
       name,
       this._checkPath(params),
       params.limit ?? 100,
+      null,
+      safe_int(params.offset ?? 0, 0, 0, 1e9),
     );
     if (!resp.ok) throw new PyValueError(resp.error);
-    return engine.search_response_to_dict(resp).data;
+    return this._count_only(params, engine.search_response_to_dict(resp).data);
   }
 
   _m_read(params) {
@@ -184,6 +185,8 @@ export class RpcSession {
       this._path(params),
       Boolean(params.outline),
       this.boundary,
+      false,
+      this._anchor(),
     );
     if (!result.ok) throw new PyValueError(result.error);
     return reader.read_result_to_dict(result).data;
@@ -201,6 +204,8 @@ export class RpcSession {
       this._path(params),
       safe_int(params.radius ?? 5, 5, 0, 200),
       this.boundary,
+      false,
+      this._anchor(),
     );
     if (!result.ok) throw new PyValueError(result.error);
     return reader.context_result_to_dict(result).data;
@@ -216,9 +221,6 @@ export class RpcSession {
 
 
 export function run_rpc(root = null) {
-  
-
-
 
   const default_path = root ? root : ".";
   const boundary = root ? "root" : "system";

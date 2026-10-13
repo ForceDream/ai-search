@@ -1,12 +1,6 @@
 #!/usr/bin/env node
 
 
-
-
-
-
-
-
 import { VERSION, is_output_tty } from "../src/config.mjs";
 import {
   search_text,
@@ -43,7 +37,7 @@ function parse_int_arg(flag, value) {
 }
 
 function parse_args(argv, positional_names, flag_specs) {
-  
+
   const values = {};
   const positional = [];
   const flag_map = build_flag_map(flag_specs);
@@ -205,7 +199,7 @@ function main() {
 }
 
 function choose_output(args) {
-  
+
   if (args.text) return false;
   if (args.json) return true;
 
@@ -381,7 +375,7 @@ function print_json(data) {
 }
 
 function print_grep_text(resp) {
-  
+
   if (!resp.ok) {
     process.stderr.write(`Error: ${resp.error}\n`);
     return;
@@ -543,7 +537,7 @@ function print_ctx_text(result) {
 }
 
 function print_tree_text(tree_data) {
-  
+
   const root = tree_data.root ?? ".";
   const entries = tree_data.tree ?? [];
   console.log(`\x1b[1;35m${root}\x1b[0m`);

@@ -1,14 +1,32 @@
 
 
-
-
 import fs from "node:fs";
 import path from "node:path";
 
 import { PyValueError, abs_path } from "./util.mjs";
 
-export const VERSION = "0.1.0";
+export const VERSION = "1.1.1";
 
+
+
+export const MAX_SEARCH_BYTES = 32 * 1024 * 1024;
+
+export function looks_binary(p, probe = 8192) {
+
+  let fd = null;
+  try {
+    fd = fs.openSync(p, "r");
+    const buf = Buffer.alloc(probe);
+    const n = fs.readSync(fd, buf, 0, probe, 0);
+    return buf.subarray(0, n).includes(0);
+  } catch {
+    return false;
+  } finally {
+    if (fd !== null) {
+      try { fs.closeSync(fd); } catch { }
+    }
+  }
+}
 
 export const DEFAULT_IGNORE = [
   ".git", ".svn", ".hg",
@@ -118,8 +136,8 @@ export function find_project_root(start = ".") {
 }
 
 
-export function load_extra_ignore(root) {
-  const ignore_file = path.join(root, ".aisearchignore");
+function _read_ignore_file(ignore_file) {
+
   if (!fs.existsSync(ignore_file)) return [];
   let text;
   try {
@@ -130,11 +148,28 @@ export function load_extra_ignore(root) {
   const patterns = [];
   for (const raw of text.split(/\r\n|\r|\n/)) {
     const line = raw.trim();
-    if (line && !line.startsWith("#")) {
-      patterns.push(line.replace(/\/+$/, ""));
+    if (line && !line.startsWith("#") && !line.startsWith("!")) {
+      patterns.push(line.replace(/\/+$/, "").replace(/^\/+/, ""));
     }
   }
   return patterns;
+}
+
+
+export function load_extra_ignore(root) {
+  return _read_ignore_file(path.join(root, ".aisearchignore"));
+}
+
+
+export function load_vcs_ignore(root) {
+
+  return _read_ignore_file(path.join(root, ".gitignore"));
+}
+
+
+export function is_hidden(name) {
+
+  return name.startsWith(".") && name !== "." && name !== "..";
 }
 
 
@@ -155,11 +190,6 @@ export function is_relative_to(p, other) {
 
 
 export function safe_resolve(ref, root, boundary = "root") {
-  
-
-
-
-
 
   const ref_str = String(ref);
   if (ref_str.includes("\x00")) {
@@ -251,7 +281,6 @@ export function detect_encoding_path(p, chunk = 65536) {
 
 
 export function build_file_list(root, extensions = null, ignore = null) {
-  
 
   if (!ignore) ignore = DEFAULT_IGNORE;
   const root_abs = abs_path(root);
@@ -279,6 +308,7 @@ export function build_file_list(root, extensions = null, ignore = null) {
 
     const kept_dirs = dirnames
       .filter((dn) => {
+        if (is_hidden(dn)) return false;
         const drel = dir_rel ? `${dir_rel}/${dn}` : dn;
         return !should_ignore(dn, ignore, drel);
       })
@@ -286,6 +316,7 @@ export function build_file_list(root, extensions = null, ignore = null) {
     const sorted_files = filenames.slice().sort();
 
     for (const fn of sorted_files) {
+      if (is_hidden(fn)) continue;
       const fp = path.join(dir, fn);
       let rel;
       try {
