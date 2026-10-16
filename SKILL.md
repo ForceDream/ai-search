@@ -13,16 +13,13 @@ user-invocable: true
 
 # aisearch
 
-零依赖代码检索工具，本技能自带 Python 与 Node 两套实现（CLI 行为与 JSON 协议逐字段一致）。
+零依赖代码检索工具，自带 Python 与 Node 两套实现（CLI 行为与 JSON 协议逐字段一致）。
 
 > **⚠️ Agent 调用铁律：一律走 rpc —— `python "<SKILL_DIR>/scripts/aisearch_rpc.py" --root <项目根> <method> '<params>'`。**
 > **禁止**用 `python -m aisearch` / `node aisearch.mjs` 这类 CLI 直调（CLI 每个请求都重付一次进程启动；rpc 单进程常驻、可批量）。
-> 默认（不带 `--tool`）就是 **Python 实现**，启动链最短、总耗时最低（实测 4.7s vs Node 6.4s）；`--tool` 切 Node 仅在无 Python 环境的机器上使用。
-> CLI 形态仅供人类在终端手动使用。
-
-注意：rpc 常驻省的是**进程启动**（约零点几秒）；
-`search` / `def` / `ref` / `symbols` 每次仍是**全量扫描**（O(语料)，无索引缓存，实测 ~4.5s / 3464 文件）；
-`read` / `context` / `tree` 只碰单文件，几乎零成本。
+> 默认（不带 `--tool`）就是 **Python 实现**；`--tool` 切 Node 仅在无 Python 环境的机器上使用。CLI 形态仅供人类在终端手动使用。
+>
+> 注意：rpc 常驻省的是**进程启动**；`search` / `def` / `ref` / `symbols` 每次仍是**全量扫描**（O(语料)，无索引缓存，大项目请改用 repo-context）；`read` / `context` / `anchor` / `tree` 只碰单文件，几乎零成本。
 
 只要机器上有 **Python >= 3.9 或 Node** 之一即可，无需安装、不监听端口。
 
@@ -37,21 +34,13 @@ user-invocable: true
 
 **触发词**：查定义 / 找引用 / 谁调用了它 / 读这个函数 / 这行在哪个函数里 / 项目目录结构 / grep 替代 / LSP 替代 / 省 token 的代码检索。
 
-**最短上手**（复制即用，把 `--root` 换成目标项目根）：
-
-```bash
-python "<SKILL_DIR>/scripts/aisearch_rpc.py" --root . def '{"name":"<符号名>"}'
-```
-
-查一个符号一次调用就够；要连续查多个，用下节的 `--stdin` 批量（一次会话多请求，不重复付进程启动）。
-
-## 与 Grep / repo-context 的分工（实测结论，大项目必读）
+## 与 Grep / repo-context 的分工（大项目必读）
 
 | 任务 | 用什么 | 为什么 |
 |---|---|---|
 | 纯文本 / 正则定位 | **本工具** `search`（`--format text` 省 token、`count_only` 只要行号、`offset` 翻页） | 结构化定位（`file`/`line`/`col`/符号名）比裸 grep 可复核；单进程常驻、可批量 `--stdin` |
-| 符号问答：定义在哪 / **谁调用（callers）** / **影响面（impact）** / **枢纽榜（hubs）** / **按任务关键词找码（for）** / 歧义展开 | **repo-context**（持久索引） | `index` 一次秒级（实测 1.3s / 340 文件），之后每条查询 <0.3s；callers / impact / hubs 是本工具没有的能力 |
-| 读函数体 / 行归属（**含 Rust**，返回 `containing_symbol`）/ 批量精读 | **本工具** `read file#符号` / `context` | O(单文件)，实测 9 请求共 0.5s（含 Rust 3 请求 0.4s）；输出 metadata 前置、`content` 殿后 |
+| 符号问答：定义在哪 / **谁调用（callers）** / **影响面（impact）** / **枢纽榜（hubs）** / **按任务关键词找码（for）** / 歧义展开 | **repo-context**（持久索引） | `index` 一次秒级，之后每条查询毫秒级；callers / impact / hubs 是本工具没有的能力 |
+| 读函数体 / 行归属（**含 Rust**，返回 `containing_symbol`）/ 批量精读 | **本工具** `read file#符号` / `context` | O(单文件)；输出 metadata 前置、`content` 殿后 |
 | 大文件（>200k 字符） | **本工具** 行范围读取 | 有截断保护，不会把大文件全量拉进上下文 |
 | 结构化符号感知搜索 | 本工具 `search` / `symbols` | 输出结构化 JSON 与符号类型；大项目首轮定位交给 repo-context 的 `for` / `hubs` |
 
@@ -170,10 +159,10 @@ Get-Content "<SKILL_DIR>\assets\requests\basic.jsonl" | python "<SKILL_DIR>\scri
 **其他常见疑问**：
 
 - `def` 返回多条候选？→ 同名多定义；`match_mode` 为 `substring` 表示这是回退的模糊匹配，**必须核对**后再用。
-- 搜不到中文标识符？→ **搜索与读取统一按探测到的编码处理（UTF-8 / GB18030）**，中文标识符可正常搜到；1.0.1 起搜索路径不再硬编码 UTF-8（旧版会"读正常、搜乱码"）。
-- 凭什么说比 `grep` 省 token？→ 只回结构化片段（`file`/`line`/`line_end`/`text`）而非全部命中行；实测高频词场景输出体积约为 `grep -rn` 的 **1/15**。
+- 搜不到中文标识符？→ 搜索与读取统一按探测到的编码处理（UTF-8 / GB18030），中文标识符可正常搜到。
+- 比 `grep` 省在哪？→ 只回结构化片段（`file`/`line`/`line_end`/`text`）而非全部命中行，高频词场景输出体积小一个量级。
 - 需要跨机器/跨语言一致行为？→ Python 与 Node 两套实现**逐字段一致**，仅 rpc 的 `elapsed_ms` 与空白不同。
-- rpc 常驻会话为什么第二次 `search` 还是慢？→ 常驻省的只是**进程启动**；`search` / `def` / `ref` / `symbols` 每次都是全量扫描（无索引缓存）。大项目请改用 repo-context（持久索引，问答毫秒级），或先 Grep 定位、再用本工具 `read` / `context` 精读。
+- rpc 常驻后 `search` 还是慢？→ 常驻省的只是进程启动；检索类每次都是全量扫描。大项目改用 repo-context（持久索引）。
 
 ## 参考（按需加载）
 

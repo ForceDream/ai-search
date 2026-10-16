@@ -29,7 +29,7 @@ Get-Content "<SKILL_DIR>\assets\requests\basic.jsonl" | python "<SKILL_DIR>\scri
 ## 1）health —— 先确认边界
 
 ```json
-{"id":1,"ok":true,"data":{"version":"0.1.0","methods":["search","symbols","def","ref","read","context","tree","health"],"root":"C:\\Users\\...\\demo","boundary":"root"}}
+{"id":1,"ok":true,"data":{"version":"1.1.3","methods":["search","symbols","def","ref","read","context","anchor","tree","health"],"root":"C:\\Users\\...\\demo","boundary":"root"}}
 ```
 
 `boundary: "root"` = 传了 `--root`，越界路径会被拒绝。
