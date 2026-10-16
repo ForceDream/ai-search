@@ -27,7 +27,7 @@ from .config import (
     read_text_auto,
     should_ignore,
 )
-from .symbols import Symbol, extract_symbols, find_containing_symbol
+from .symbols import Symbol, extract_symbols
 
 
 
@@ -37,7 +37,6 @@ class Match:
     line: int
     col: int
     text: str
-    symbol: Optional[dict] = field(default=None)
     context_before: list[str] = field(default_factory=list)
     context_after: list[str] = field(default_factory=list)
 
@@ -48,8 +47,6 @@ class Match:
             "col": self.col,
             "text": self.text,
         }
-        if self.symbol:
-            d["symbol"] = self.symbol
         if self.context_before:
             d["context_before"] = self.context_before
         if self.context_after:

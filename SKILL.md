@@ -101,14 +101,15 @@ Get-Content "<SKILL_DIR>\assets\requests\basic.jsonl" | python "<SKILL_DIR>\scri
 | `symbols` | `name`(必), `path?, kind?, limit?, partial?, count_only?` | 符号搜索（子串匹配） |
 | `def` | `name`(必), `path?, limit?, substring_fallback?=true, count_only?` | 查找定义：exact 优先，候选全部来自定义正则（`match_mode:"exact"`）；无命中回退子串并标 `match_mode:"substring"`（候选需核对；`substring_fallback:false` 可关闭） |
 | `ref` | `name`(必), `path?, limit?, offset?=0, count_only?` | 查找引用（全词匹配的使用位置，支持 `offset` 分页） |
-| `read` | `file`(必), `path?, outline?` | 读文件（整文件 / 行范围 / 按符号） |
+| `read` | `file`(必), `path?, outline?, line_numbers?` | 读文件（整文件 / 行范围 / 按符号）；`line_numbers:true` 时正文每行带行号前缀（写入定位专用，默认关闭省 token） |
 | `context` | `file`(必), `line`(必), `radius?, path?` | 某行的语义上下文（所属函数、导入等） |
+| `anchor` | `file`(必), `symbol?` 或 `line?`, `path?` | 写入定位锚点：`lines{start,end}` + `sha` + `head`/`tail`；写前取一次、写后同参复核（见「写入定位」节） |
 | `tree` | `path?, depth?` | 项目目录树 |
 | `health` | `{}` | 版本 / 方法列表 / 生效根与边界 |
 
 响应统一为 `{"id":N,"ok":true,"data":{...}}` 或 `{"id":N,"ok":false,"error":"..."}`；非法请求（坏 JSON、未知方法、非法参数）返回结构化错误，进程不崩溃。
 
-## `file` 引用语法（`read` / `context`）
+## `file` 引用语法（`read` / `context` / `anchor`）
 
 | 写法 | 含义 |
 |---|---|
@@ -116,6 +117,21 @@ Get-Content "<SKILL_DIR>\assets\requests\basic.jsonl" | python "<SKILL_DIR>\scri
 | `src/app.ts:10-50` | 行范围 |
 | `src/app.ts#parseConfig` | 某个符号的完整实现（**最省 token 的读法，优先用它替代整文件读取**） |
 | `src/app.ts:42` | 单行（`context` 也接受该写法） |
+
+## 写入定位（改代码前必读）
+
+「定位不准、写入串行」的根因是**数行号**与**锚点过期**。用本工具把定位变成可校验的三步：
+
+1. **写前取锚点**：`anchor {"file":"src/app.ts#parseConfig"}`（也支持 `file:10-50` 与 `{"file":"…","line":42}`）
+   → 返回 `lines{start,end}`、`sha`、`head`/`tail`（范围首末行）。**记下这三样。**
+2. **写时按行号取正文**：`read {"file":"src/app.ts:10-50","line_numbers":true}` —— 正文每行带行号前缀，
+   `old_string` 从带行号的正文里原样摘，不再靠数行（CRLF 文件注意行尾、JSON 转义注意还原）。
+3. **写后复核锚点**：同参再跑一次 `anchor` ——
+   `start`/`end` 与预期一致且 `sha` 按预期变化 = 落点正确；`start`/`end` 漂了 = 定位偏了，先修再继续。
+
+**锚点刷新纪律（治「串行」）**：同一文件连续多次编辑时，**每次 Edit 之后重新取一次 anchor**，
+把新的 `start`/`end` 作为下一次的基准——行号在第一次编辑后就可能已经漂了，不刷新就会叠加错位。
+`anchor` 的 `sha` 与 model-switch-or-resume 的块 sha 同口径，两边可以对拍。
 
 ## `path` 的范围
 

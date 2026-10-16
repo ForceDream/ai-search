@@ -1,5 +1,27 @@
 # aisearch 更新日志
 
+## [1.1.3] - 2026-10-16 · 清理版（死代码）
+
+### 清理
+
+- 删除零引用的错误常量 `PyTypeError` / `PyOSError` / `PyPermissionError`（`aisearch-js/src/util.mjs`）
+- 删除未使用导入：`engine.py` 的 `find_containing_symbol`、`symbols.py` 的 `detect_lang`
+- 删除 `Match.symbol` 残留字段（从未被赋值，响应中 `symbol` 分支不可达；Python / Node 同步）
+
+## [1.1.2] - 2026-10-13 · 功能版（写入定位）
+
+针对「写入定位不准、连续编辑串行」：把定位从"数行号"变成可校验的锚点。
+
+### 新增
+
+- `anchor` 方法：`{"file":"x.py#符号"}` / `{"file":"x.py:10-50"}` / `{"file":"x.py","line":42}` → `lines{start,end}` + `sha` + `head`/`tail`。写前取一次记下，写后同参再取一次：`start`/`end` 一致且 `sha` 按预期变化 = 落点正确；`start`/`end` 漂移 = 定位偏了。`sha` 与 model-switch-or-resume 的块 sha 同口径，可互相对拍
+- `read` 新增 `line_numbers:true`：正文每行带行号前缀（从 `lines.start` 起算），`old_string` 从带行号正文原样摘，消灭"数行号"误差源；默认关闭保持省 token
+- 文本输出模式（`--format text`）支持 `anchor` 块与 `read` 的 `(带行号)` 标记
+
+### 文档
+
+- SKILL.md 新增「写入定位（改代码前必读）」节：取锚点 → 按行号取正文 → 写后复核锚点三步，以及**锚点刷新纪律**（同文件连续编辑时每次 Edit 后重取 anchor，治「串行」）
+
 ## [1.1.1] - 2026-10-13 · 修复版（边界 / 过滤 / 健壮性）
 
 ### 修复

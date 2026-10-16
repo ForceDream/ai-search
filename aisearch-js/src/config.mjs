@@ -5,7 +5,7 @@ import path from "node:path";
 
 import { PyValueError, abs_path } from "./util.mjs";
 
-export const VERSION = "1.1.1";
+export const VERSION = "1.1.3";
 
 
 

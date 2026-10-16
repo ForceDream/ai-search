@@ -40,7 +40,6 @@ export function match_to_dict(m) {
     col: m.col,
     text: m.text,
   };
-  if (m.symbol) d.symbol = m.symbol;
   if (m.context_before.length) d.context_before = m.context_before;
   if (m.context_after.length) d.context_after = m.context_after;
   return d;
@@ -63,7 +62,6 @@ function _byte_offset_to_col(text, byteOff) {
 export function make_match(file, line, col, text) {
   return {
     file, line, col, text,
-    symbol: null,
     context_before: [],
     context_after: [],
   };

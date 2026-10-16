@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
 import stat as _stat_mod
 from dataclasses import dataclass, field
@@ -651,3 +652,135 @@ def get_context(
         total_lines=total,
         window_start=ctx_start + 1,
     )
+
+
+
+
+
+def content_sha(text: str) -> str:
+    """范围正文摘要：统一换行、去行尾空白后 sha256 前 16 位。
+
+    与 model-switch-or-resume 的块 sha 同口径——两边的校验可以互相对拍。
+    """
+    norm = "\n".join(l.rstrip() for l in text.replace("\r\n", "\n").replace("\r", "\n").split("\n"))
+    return hashlib.sha256(norm.encode("utf-8")).hexdigest()[:16]
+
+
+def _pick_symbol(syms: list, name: str):
+    """按名字取符号：精确同名优先，唯一子串命中次之，多个子串命中报歧义。"""
+    exact = [s for s in syms if s.name == name]
+    if exact:
+        return exact[0]
+    partials = [s for s in syms if name.lower() in s.name.lower()]
+    if len(partials) == 1:
+        return partials[0]
+    if len(partials) > 1:
+        raise ValueError(
+            f"Symbol '{name}' is ambiguous ({len(partials)} partial matches); "
+            f"candidates: " + ", ".join(s.name for s in partials[:20])
+        )
+    return None
+
+
+def anchor(
+    file_ref: str,
+    path: str = ".",
+    boundary: str = "root",
+    anchor_root: Optional[Path] = None,
+    symbol: Optional[str] = None,
+    line: Optional[int] = None,
+) -> dict:
+    """写入定位锚点：把目标范围解析成可校验的定位信息。
+
+    目标范围三选一（也可写在 file 里）：`file#符号` / `file:A-B` / `line`（取所在符号，无符号则单行）。
+    返回 {file, lines{start,end}, total_lines, sha, head, tail, symbol?}：
+      sha   范围正文摘要（content_sha 口径，写后可复算）
+      head/tail  范围首行/末行（截断 80 字符），肉眼复核落点用
+    用法：写前调一次记下 {start,end,sha}；写后同参再调一次——
+      start/end 与预期一致且 sha 按预期变化 = 落点正确；start/end 漂了 = 定位偏了。
+    """
+    root = anchor_root if anchor_root is not None else find_project_root(path)
+    ref = file_ref
+    if symbol and "#" not in ref:
+        ref = f"{ref}#{symbol}"
+    try:
+        full, start_line, end_line, sym_name = _resolve_path(ref, root, boundary=boundary)
+    except ValueError as e:
+        raise ValueError(str(e))
+
+    try:
+        st = full.stat()
+    except FileNotFoundError:
+        raise ValueError(_file_nf_error(root, full))
+    except OSError as e:
+        raise ValueError(str(e))
+    if not _stat_mod.S_ISREG(st.st_mode):
+        raise ValueError(f"Not a file: {full}")
+    if _is_binary(full):
+        raise ValueError(f"Binary file ({st.st_size} bytes); not text")
+
+    rel = _rel(root, full)
+    lang = detect_lang(full)
+    large = st.st_size > MAX_FILE_BYTES
+    sym_dict = None
+
+    if large:
+        enc = detect_encoding(full)
+        total = _stream_count_lines(full, enc)
+        if sym_name:
+            decls = _scan_decls_stream(full, enc, lang) if lang else []
+            sym = _pick_symbol(decls, sym_name)
+            if sym is None:
+                raise ValueError(f"Symbol '{sym_name}' not found")
+            start, end = max(1, sym.line), min(total, sym.line_end or total)
+            sym_dict = sym.to_dict()
+        elif start_line:
+            start, end = max(1, start_line), min(total, end_line or start_line)
+        elif line:
+            start = end = max(1, min(total, int(line)))
+        else:
+            raise ValueError("Missing target: use file#symbol / file:A-B / line")
+        text = _stream_read_range(full, enc, start, end)
+    else:
+        try:
+            text_all = read_text_auto(full)
+        except (OSError, PermissionError) as e:
+            raise ValueError(str(e))
+        lines = text_all.splitlines()
+        total = len(lines)
+        if sym_name:
+            syms = extract_symbols(lines, lang, rel) if lang else []
+            sym = _pick_symbol(syms, sym_name)
+            if sym is None:
+                raise ValueError(f"Symbol '{sym_name}' not found")
+            start, end = max(1, sym.line), min(total, sym.line_end or total)
+            sym_dict = sym.to_dict()
+        elif start_line:
+            start, end = max(1, start_line), min(total, end_line or start_line)
+        elif line:
+            ln = int(line)
+            if ln < 1 or ln > total:
+                raise ValueError(f"Line {ln} out of range (1-{total})")
+            sym = find_containing_symbol(lines, lang, ln) if lang else None
+            if sym:
+                start, end = max(1, sym.line), min(total, sym.line_end or total)
+                sym_dict = sym.to_dict()
+            else:
+                start = end = ln
+        else:
+            raise ValueError("Missing target: use file#symbol / file:A-B / line")
+        text = "\n".join(lines[start - 1:end])
+
+    body = text.split("\n")
+    out = {
+        "file": rel,
+        "language": lang,
+        "lines": {"start": start, "end": end},
+        "total_lines": total,
+        "sha": content_sha(text),
+        "head": (body[0].rstrip()[:80] if body else ""),
+        "tail": (body[-1].rstrip()[:80] if body else ""),
+    }
+    if sym_dict:
+        out["symbol"] = sym_dict
+    return out

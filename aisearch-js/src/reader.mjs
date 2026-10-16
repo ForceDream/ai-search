@@ -1,4 +1,4 @@
-
+﻿
 
 import fs from "node:fs";
 import path from "node:path";
@@ -20,7 +20,7 @@ import {
   iter_symbol_decls,
   symbol_to_dict,
 } from "./symbols.mjs";
-import { PyValueError, abs_path, py_int, splitLines } from "./util.mjs";
+import { PyValueError, abs_path, py_int, rstrip, splitLines } from "./util.mjs";
 
 
 export const MAX_FILE_BYTES = 5 * 1024 * 1024;
@@ -658,4 +658,120 @@ export function get_context(file_ref, line, path_arg = ".", radius = 5, boundary
     language: lang, containing_symbol: containing_sym,
     imports, outline, total_lines: total, window_start: ctx_start + 1, error: "",
   };
+}
+
+
+
+
+
+import { createHash } from "node:crypto";
+
+export function content_sha(text) {
+  const norm = splitLines(text.replace(/\r\n/g, "\n").replace(/\r/g, "\n"))
+    .map((l) => l.replace(/\s+$/, "")).join("\n");
+  return createHash("sha256").update(norm, "utf8").digest("hex").slice(0, 16);
+}
+
+function pick_symbol(syms, name) {
+  const exact = syms.filter((s) => s.name === name);
+  if (exact.length) return exact[0];
+  const partials = syms.filter((s) => s.name.toLowerCase().includes(name.toLowerCase()));
+  if (partials.length === 1) return partials[0];
+  if (partials.length > 1) {
+    throw new PyValueError(`Symbol '${name}' is ambiguous (${partials.length} partial matches); candidates: ` +
+      partials.slice(0, 20).map((s) => s.name).join(", "));
+  }
+  return null;
+}
+
+export function anchor(file_ref, path_arg = ".", boundary = "root", anchor_root = null, symbol = null, line = null) {
+  const root = anchor_root ? abs_path(anchor_root) : find_project_root(path_arg);
+  const ref = symbol && !file_ref.includes("#") ? `${file_ref}#${symbol}` : file_ref;
+  let full, start_line, end_line, sym_name;
+  try {
+    [full, start_line, end_line, sym_name] = _resolve_path(ref, root, boundary);
+  } catch (e) {
+    throw new PyValueError(e.message);
+  }
+  let st;
+  try {
+    st = fs.statSync(full);
+  } catch (e) {
+    if (e && e.code === "ENOENT") throw new PyValueError(file_nf_error(root, full));
+    throw new PyValueError(e.message);
+  }
+  if (!st.isFile()) throw new PyValueError(`Not a file: ${full}`);
+  if (_is_binary(full)) throw new PyValueError(`Binary file (${st.size} bytes); not text`);
+
+  const rel = _rel(root, full);
+  const lang = detect_lang(full);
+  const large = st.size > MAX_FILE_BYTES;
+  let sym_dict = null;
+  let start, end, total, text;
+
+  if (large) {
+    const enc = detect_encoding_path(full);
+    total = stream_count_lines(full, enc);
+    if (sym_name) {
+      const decls = lang ? scan_decls_stream(full, enc, lang) : [];
+      const sym = pick_symbol(decls, sym_name);
+      if (!sym) throw new PyValueError(`Symbol '${sym_name}' not found`);
+      start = Math.max(1, sym.line);
+      end = Math.min(total, sym.line_end || total);
+      sym_dict = symbol_to_dict(sym);
+    } else if (start_line) {
+      start = Math.max(1, start_line);
+      end = Math.min(total, end_line || start_line);
+    } else if (line) {
+      start = end = Math.max(1, Math.min(total, py_int(line)));
+    } else {
+      throw new PyValueError("Missing target: use file#symbol / file:A-B / line");
+    }
+    text = stream_read_range(full, enc, start, end);
+  } else {
+    let raw;
+    try {
+      raw = decode_buffer(fs.readFileSync(full));
+    } catch (e) {
+      throw new PyValueError(e.message);
+    }
+    const lines = splitLines(raw);
+    total = lines.length;
+    if (sym_name) {
+      const syms = lang ? extract_symbols(lines, lang, rel) : [];
+      const sym = pick_symbol(syms, sym_name);
+      if (!sym) throw new PyValueError(`Symbol '${sym_name}' not found`);
+      start = Math.max(1, sym.line);
+      end = Math.min(total, sym.line_end || total);
+      sym_dict = symbol_to_dict(sym);
+    } else if (start_line) {
+      start = Math.max(1, start_line);
+      end = Math.min(total, end_line || start_line);
+    } else if (line) {
+      const ln = py_int(line);
+      if (ln < 1 || ln > total) throw new PyValueError(`Line ${ln} out of range (1-${total})`);
+      const sym = lang ? find_containing_symbol(lines, lang, ln) : null;
+      if (sym) {
+        start = Math.max(1, sym.line);
+        end = Math.min(total, sym.line_end || total);
+        sym_dict = symbol_to_dict(sym);
+      } else {
+        start = end = ln;
+      }
+    } else {
+      throw new PyValueError("Missing target: use file#symbol / file:A-B / line");
+    }
+    text = lines.slice(start - 1, end).join("\n");
+  }
+
+  const body = text.split("\n");
+  const out = {
+    file: rel, language: lang,
+    lines: { start, end }, total_lines: total,
+    sha: content_sha(text),
+    head: body.length ? rstrip(body[0]).slice(0, 80) : "",
+    tail: body.length ? rstrip(body[body.length - 1]).slice(0, 80) : "",
+  };
+  if (sym_dict) out.symbol = sym_dict;
+  return out;
 }

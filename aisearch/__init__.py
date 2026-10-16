@@ -3,4 +3,4 @@
 零依赖安装、JSON 输出、regex 提取符号（不需要 LSP）、内置 stdio rpc 无服务模式。
 """
 
-__version__ = "1.1.1"
+__version__ = "1.1.3"

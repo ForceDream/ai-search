@@ -9,8 +9,6 @@ import re
 from dataclasses import dataclass
 from typing import Optional
 
-from .config import detect_lang
-
 
 
 MAX_SYMBOLS_PER_FILE = 5000

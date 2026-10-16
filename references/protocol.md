@@ -26,6 +26,8 @@ aisearch rpc --root /path/to/proj  # 锁定项目根（boundary=root，拦截 ..
 
 约定：`file:line:text` 命中行、`file:line-text` 上下文行、块间空行分隔、
 错误为 `[id] METHOD ERROR: 消息`；`next_offset` / `match_mode` / `truncated` 在块头。
+`read` 带 `line_numbers` 时块头标 `(带行号)`，正文形如 `143: def foo()`；
+`anchor` 渲染为 `[id] anchor <file> lines=A-B/N sha=… (in 符号)` + `head:` / `tail:` 两行。
 
 ## 2. 方法表
 
@@ -35,8 +37,9 @@ aisearch rpc --root /path/to/proj  # 锁定项目根（boundary=root，拦截 ..
 | `symbols` | `name`(必), `path`, `kind`, `limit`=50, `partial`=true, `count_only` | `matches[{file,kind,name,line,line_end,parent?,text}]`, `total`, `files_searched`, `skipped?` |
 | `def` | `name`(必), `path`, `limit`?=50, `substring_fallback`?=true, `count_only` | **两级匹配**：exact 优先——候选全部来自定义正则且符号名完全相等（`match_mode:"exact"`），杜绝子串命中稀释与 import/使用行混入；exact 无命中时回退子串匹配并标 `match_mode:"substring"`（候选需核对）。`substring_fallback:false` 关闭回退。排序：精确名 > class/struct/interface/trait > enum/type > function > method > 行号 |
 | `ref` | `name`(必), `path`, `limit`=100, `offset`=0, `count_only` | 同 `search`（全词匹配的引用位置，含 `offset` 分页与 `next_offset`） |
-| `read` | `file`(必), `path`, `outline`=false | `file`, `lines{start,end}`, `total_lines`, `content`, `language?`, `symbol?`, `symbols?`(human/大纲时), `truncated?` |
-| `context` | `file`(必), `line`(必), `radius`=5, `path` | **metadata 前置、`content` 殿后**：`file`, `line`, `language?`, `containing_symbol?`, `imports?`, `total_lines?`, `window_start?`, `truncated?`, `content`（含 Rust 在内的各语言均返回 `containing_symbol`） |
+| `read` | `file`(必), `path`, `outline`=false, `line_numbers`=false | `file`, `lines{start,end}`, `total_lines`, `content`, `language?`, `symbol?`, `symbols?`, `truncated?`, `line_numbers?`；`line_numbers:true` 时 `content` 每行带行号前缀（从 `lines.start` 起算）——写入定位专用，默认关闭（避免 ~2x token 浪费） |
+| `context` | `file`(必), `line`(必), `radius`=5, `path` | **metadata 前置、`content` 殿后**：`file`, `line`, `language?`, `containing_symbol?`, `imports?`, `total_lines?`, `window_start?`, `truncated?`, `content` |
+| `anchor` | `file`(必), `symbol?` 或 `line?`, `path` | 写入定位锚点：`file`, `lines{start,end}`, `total_lines`, `sha`, `head`, `tail`, `symbol?`。目标三选一（也可写在 `file` 里）：`file#符号` / `file:A-B` / `line`（取所在符号，无符号则单行）。`sha` = 范围正文规范化摘要（统一换行、去行尾空白、sha256 前 16 位），**与 model-switch-or-resume 的块 sha 同口径**；`head`/`tail` = 范围首末行（截断 80 字符）供肉眼复核。写前取一次、写后同参再取一次：`start`/`end` 一致且 `sha` 按预期变化 = 落点正确；`start`/`end` 漂移 = 定位偏了 |
 | `tree` | `path`, `depth`=3 | `root`, `tree[{name,type:"dir"｜"file",children?,lang?,size?}]`, `project_root?` |
 | `health` | `{}` | `version`, `methods`, `root`, `boundary` |
 

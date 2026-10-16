@@ -28,7 +28,7 @@ from .config import find_project_root, is_relative_to
 
 MAX_LINE_BYTES = 1 * 1024 * 1024
 
-_METHODS = ("search", "symbols", "def", "ref", "read", "context", "tree", "health")
+_METHODS = ("search", "symbols", "def", "ref", "read", "context", "anchor", "tree", "health")
 
 
 def _clamp(value, default, lo, hi):
@@ -180,7 +180,28 @@ class RpcSession:
         )
         if not result.ok:
             raise ValueError(result.error)
-        return result.to_dict()["data"]
+        data = result.to_dict()["data"]
+        if params.get("line_numbers") and data.get("content"):
+
+            start = (data.get("lines") or {}).get("start") or 1
+            data["content"] = "\n".join(
+                f"{i}: {ln}" for i, ln in enumerate(data["content"].split("\n"), start=start)
+            )
+            data["line_numbers"] = True
+        return data
+
+    def _m_anchor(self, params: dict) -> dict:
+        file_ref = params.get("file", "")
+        if not file_ref:
+            raise ValueError("Missing 'file'")
+        return reader.anchor(
+            file_ref=file_ref,
+            path=self._path(params),
+            boundary=self.boundary,
+            anchor_root=self._anchor(),
+            symbol=params.get("symbol"),
+            line=params.get("line"),
+        )
 
     def _m_context(self, params: dict) -> dict:
         file_ref = params.get("file", "")

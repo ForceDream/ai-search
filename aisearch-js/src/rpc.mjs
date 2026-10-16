@@ -11,7 +11,7 @@ import { PyValueError, safe_int, abs_path } from "./util.mjs";
 
 export const MAX_LINE_BYTES = 1 * 1024 * 1024;
 
-export const METHODS = ["search", "symbols", "def", "ref", "read", "context", "tree", "health"];
+export const METHODS = ["search", "symbols", "def", "ref", "read", "context", "anchor", "tree", "health"];
 
 
 export class RpcSession {
@@ -27,6 +27,7 @@ export class RpcSession {
       ref: (p) => this._m_ref(p),
       read: (p) => this._m_read(p),
       context: (p) => this._m_context(p),
+      anchor: (p) => this._m_anchor(p),
       tree: (p) => this._m_tree(p),
     };
   }
@@ -189,7 +190,27 @@ export class RpcSession {
       this._anchor(),
     );
     if (!result.ok) throw new PyValueError(result.error);
-    return reader.read_result_to_dict(result).data;
+    const data = reader.read_result_to_dict(result).data;
+    if (params.line_numbers && data.content) {
+
+      const start = (data.lines && data.lines.start) || 1;
+      data.content = data.content.split("\n").map((ln, i) => `${start + i}: ${ln}`).join("\n");
+      data.line_numbers = true;
+    }
+    return data;
+  }
+
+  _m_anchor(params) {
+    const file_ref = params.file ?? "";
+    if (!file_ref) throw new PyValueError("Missing 'file'");
+    return reader.anchor(
+      file_ref,
+      this._path(params),
+      this.boundary,
+      this._anchor(),
+      params.symbol ?? null,
+      params.line ?? null,
+    );
   }
 
   _m_context(params) {

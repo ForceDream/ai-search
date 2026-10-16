@@ -136,6 +136,3 @@ function named_error(name) {
 }
 
 export const PyValueError = named_error("ValueError");
-export const PyTypeError = named_error("TypeError");
-export const PyOSError = named_error("OSError");
-export const PyPermissionError = named_error("PermissionError");
