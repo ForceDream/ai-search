@@ -87,8 +87,8 @@ Get-Content "<SKILL_DIR>\assets\requests\basic.jsonl" | python "<SKILL_DIR>\scri
 | method | params | 用途 |
 |---|---|---|
 | `search` | `pattern`(必), `path?, context?, limit?, ignore_case?, whole_word?, extensions?, offset?=0, count_only?` | 文本搜索（替代 grep）；`offset` 分页，池里还有剩余时响应带 `next_offset`（继续带它当 `offset` 翻页）；`count_only:true` 只回统计不回正文 |
-| `symbols` | `name`(必), `path?, kind?, limit?, partial?, count_only?` | 符号搜索（子串匹配） |
-| `def` | `name`(必), `path?, limit?, substring_fallback?=true, count_only?` | 查找定义：exact 优先，候选全部来自定义正则（`match_mode:"exact"`）；无命中回退子串并标 `match_mode:"substring"`（候选需核对；`substring_fallback:false` 可关闭） |
+| `symbols` | `name`(必), `path?, kind?, limit?, partial?, offset?=0, count_only?` | 符号搜索（子串匹配）；`offset` 分页，池里还有剩余时响应带 `next_offset` + `truncated:true` |
+| `def` | `name`(必), `path?, limit?, substring_fallback?=true, offset?=0, count_only?` | 查找定义：exact 优先，候选全部来自定义正则（`match_mode:"exact"`）；无命中回退子串并标 `match_mode:"substring"`（候选需核对；`substring_fallback:false` 可关闭）；`offset` 分页（按扫描序翻页、排序只作用于页内），截断时带 `next_offset` + `truncated:true` |
 | `ref` | `name`(必), `path?, limit?, offset?=0, count_only?` | 查找引用（全词匹配的使用位置，支持 `offset` 分页） |
 | `read` | `file`(必), `path?, outline?, line_numbers?` | 读文件（整文件 / 行范围 / 按符号）；`line_numbers:true` 时正文每行带行号前缀（写入定位专用，默认关闭省 token） |
 | `context` | `file`(必), `line`(必), `radius?, path?` | 某行的语义上下文（所属函数、导入等） |
@@ -132,6 +132,7 @@ Get-Content "<SKILL_DIR>\assets\requests\basic.jsonl" | python "<SKILL_DIR>\scri
 
 - 单次返回正文上限 **200000 字符**，超出即截断并置 `truncated: true` —— 此时改用 `file:行范围` 或 `file#符号`，不要直接读整文件。
 - 单次结果 ≤ 5000 条、上下文行数 ≤ 200、目录树深度 ≤ 16、搜索模式 ≤ 256 字符。
+- **`def`/`symbols` 默认 `limit=50`**（可手动调大，钳制上限 5000；`ref` 默认 100）。结果被 limit 截断时响应带 `truncated:true` 与 `next_offset`——把 `next_offset` 当 `offset` 续读，或显式调大 `limit`；**`total` 是本次返回条数，不是存在总数**（`total:50` 应读作“≥50”）。
 - 文本文件 > 5MB 走流式：无范围时只返回头部预览并置 `truncated: true`。
 - 无 BOM 且含 NUL 的文件判为二进制，返回 `ok:false, "Binary file (...); not text"` —— **不要重试**，改用文本源文件。
 - **默认不搜**：隐藏文件/目录（点开头）与 `.gitignore` 列出的路径 —— 与 rg 默认一致；结果里的 `skipped` 是被跳过的文件数。需要搜隐藏目录时直接把 `path` 指到它。
@@ -159,6 +160,7 @@ Get-Content "<SKILL_DIR>\assets\requests\basic.jsonl" | python "<SKILL_DIR>\scri
 **其他常见疑问**：
 
 - `def` 返回多条候选？→ 同名多定义；`match_mode` 为 `substring` 表示这是回退的模糊匹配，**必须核对**后再用。
+- `def`/`symbols` 只返回 50 条？→ 默认 `limit=50` 且按扫描（字典）序截断，字典序靠前的结果会挤占名额——大仓/多树语料上后段树的定义完全不可见。响应带 `truncated:true` 时把 `next_offset` 当 `offset` 续读或调大 `limit`（≤5000）；要“全局共几处”的权威计数用 grep/repo-context。
 - 搜不到中文标识符？→ 搜索与读取统一按探测到的编码处理（UTF-8 / GB18030），中文标识符可正常搜到。
 - 比 `grep` 省在哪？→ 只回结构化片段（`file`/`line`/`line_end`/`text`）而非全部命中行，高频词场景输出体积小一个量级。
 - 需要跨机器/跨语言一致行为？→ Python 与 Node 两套实现**逐字段一致**，仅 rpc 的 `elapsed_ms` 与空白不同。

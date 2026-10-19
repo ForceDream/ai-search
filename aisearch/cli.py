@@ -16,8 +16,6 @@ from .config import is_output_tty
 
 
 def main():
-
-
     try:
         if hasattr(sys.stdout, "reconfigure"):
             sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -34,7 +32,6 @@ def main():
 
     sub = parser.add_subparsers(dest="command", help="可用命令")
 
-
     p_grep = sub.add_parser("grep", help="文本搜索 (grep 替代)")
     p_grep.add_argument("pattern", help="搜索模式 (正则)")
     p_grep.add_argument("path", nargs="?", default=".", help="搜索路径 (默认当前目录)")
@@ -46,7 +43,6 @@ def main():
     p_grep.add_argument("--json", action="store_true", help="JSON 输出")
     p_grep.add_argument("--text", action="store_true", help="文本输出")
 
-
     p_sym = sub.add_parser("sym", help="符号搜索 (函数/类/结构体)")
     p_sym.add_argument("name", help="符号名称（默认按子串匹配）")
     p_sym.add_argument("path", nargs="?", default=".", help="搜索路径")
@@ -56,13 +52,11 @@ def main():
     p_sym.add_argument("--json", action="store_true")
     p_sym.add_argument("--text", action="store_true")
 
-
     p_def = sub.add_parser("def", help="查找符号定义")
     p_def.add_argument("name", help="符号名称")
     p_def.add_argument("path", nargs="?", default=".", help="搜索路径")
     p_def.add_argument("--json", action="store_true")
     p_def.add_argument("--text", action="store_true")
-
 
     p_ref = sub.add_parser("ref", help="查找符号引用")
     p_ref.add_argument("name", help="符号名称")
@@ -71,14 +65,12 @@ def main():
     p_ref.add_argument("--json", action="store_true")
     p_ref.add_argument("--text", action="store_true")
 
-
     p_cat = sub.add_parser("cat", help="智能读取文件")
     p_cat.add_argument("file", help="文件引用 (file.py / file.py:10-50 / file.py#func)")
     p_cat.add_argument("path", nargs="?", default=".", help="项目路径")
     p_cat.add_argument("--outline", action="store_true", help="只输出符号大纲")
     p_cat.add_argument("--json", action="store_true")
     p_cat.add_argument("--text", action="store_true")
-
 
     p_ctx = sub.add_parser("ctx", help="获取某行的丰富上下文")
     p_ctx.add_argument("location", help="位置 (file.py:42)")
@@ -87,13 +79,11 @@ def main():
     p_ctx.add_argument("--json", action="store_true")
     p_ctx.add_argument("--text", action="store_true")
 
-
     p_tree = sub.add_parser("tree", help="项目目录树")
     p_tree.add_argument("path", nargs="?", default=".", help="项目路径")
     p_tree.add_argument("-d", "--depth", type=int, default=3, help="显示深度 (默认 3)")
     p_tree.add_argument("--json", action="store_true")
     p_tree.add_argument("--text", action="store_true")
-
 
     p_rpc = sub.add_parser(
         "rpc",
@@ -110,11 +100,7 @@ def main():
         parser.print_help()
         sys.exit(1)
 
-
     use_json = _choose_output(args)
-
-
-
 
 
     try:
@@ -146,15 +132,11 @@ def main():
 
 
 def _choose_output(args) -> bool:
-    """返回 True 表示 JSON 输出。"""
     if getattr(args, "text", False):
         return False
     if getattr(args, "json", False):
         return True
-
     return not is_output_tty()
-
-
 
 
 def _cmd_grep(args, use_json):
@@ -226,7 +208,6 @@ def _cmd_ref(args, use_json):
 def _cmd_cat(args, use_json):
     from .reader import read_file
 
-
     result = read_file(
         file_ref=args.file,
         path=args.path,
@@ -255,7 +236,6 @@ def _cmd_ctx(args, use_json):
     except ValueError:
         _print_json({"ok": False, "error": f"Invalid line number: {line_str}"})
         sys.exit(1)
-
 
     result = get_context(
         file_ref=file_ref,
@@ -288,14 +268,11 @@ def _cmd_rpc(args):
     run_rpc(root=args.root)
 
 
-
-
 def _print_json(data):
     print(json.dumps(data, ensure_ascii=False, indent=2))
 
 
 def _print_grep_text(resp):
-    """以类似 ripgrep 的格式输出文本。"""
     data = resp.to_dict()
     if not data.get("ok"):
         print(f"Error: {data.get('error')}", file=sys.stderr)
@@ -420,7 +397,6 @@ def _print_ctx_text(result):
     content = d.get("content", "")
     if content:
         content_lines = content.splitlines()
-
         start_line = d.get("window_start") or max(1, line - (len(content_lines) // 2))
         print()
         for i, cl in enumerate(content_lines):
@@ -440,7 +416,6 @@ def _print_ctx_text(result):
 
 
 def _print_tree_text(tree_data: dict):
-    """以 tree 命令的格式输出目录树。"""
     root = tree_data.get("root", ".")
     entries = tree_data.get("tree", [])
     print(f"\033[1;35m{root}\033[0m")

@@ -9,10 +9,7 @@ import re
 from dataclasses import dataclass
 from typing import Optional
 
-
-
 MAX_SYMBOLS_PER_FILE = 5000
-
 
 
 @dataclass
@@ -34,15 +31,12 @@ class Symbol:
         return d
 
 
-
-
 _LangPatterns = list[tuple[str, str, int]]
 
 PYTHON_PATTERNS: _LangPatterns = [
     ("class",     r"^(\s*)class\s+(\w+)", 2),
     ("function",  r"^(\s*)(?:async\s+)?def\s+(\w+)", 2),
 ]
-
 
 _JS_KW = r"get|set|if|for|while|switch|catch|return|typeof|new|do|else|await|class|function|with|try|finally|throw|delete|yield|using|lock"
 
@@ -51,15 +45,11 @@ JAVASCRIPT_PATTERNS: _LangPatterns = [
     ("function", r"^(\s*)(?:export\s+(?:default\s+)?)?(?:async\s+)?function\s+(\w+)", 2),
     ("function", r"^(\s*)(?:export\s+)?(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?\(", 2),
     ("function", r"^(\s*)(?:export\s+)?(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?(?:\([^)]*\)|\w+)\s*=>", 2),
-
-
     ("method",   r"^(\s*)(?:async\s+)?(?!(?:" + _JS_KW + r")\b)(\w+)\s*\([^)]*\)\s*[\{:]", 2),
 ]
 
 TYPESCRIPT_EXTRA: _LangPatterns = [
     ("interface", r"^(\s*)(?:export\s+)?interface\s+(\w+)", 2),
-
-
     ("type",      r"^(\s*)(?:export\s+)?type\s+(\w+)\s*[=<{]", 2),
     ("enum",      r"^(\s*)(?:export\s+)?(?:const\s+)?enum\s+(\w+)", 2),
 ]
@@ -76,9 +66,6 @@ RUST_PATTERNS: _LangPatterns = [
     ("struct",    r"^(\s*)(?:pub\s+)?struct\s+(\w+)", 2),
     ("enum",      r"^(\s*)(?:pub\s+)?enum\s+(\w+)", 2),
     ("trait",     r"^(\s*)(?:pub\s+)?trait\s+(\w+)", 2),
-
-
-
     ("impl",      r"^(\s*)impl(?:\s*<[^>]*>)?\s+(?:.*?\sfor\s+)?(\w+)\s*(?:<[^>]*>)?\s*(?:\{|where|$)", 2),
     ("type",      r"^(\s*)(?:pub\s+)?type\s+(\w+)", 2),
     ("macro",     r"^(\s*)(?:pub\s+)?macro_rules!\s+(\w+)", 2),
@@ -151,8 +138,6 @@ LANG_PATTERNS: dict[str, _LangPatterns] = {
 }
 
 
-
-
 @dataclass
 class _CompiledPattern:
     kind: str
@@ -172,14 +157,11 @@ def _get_compiled(lang: str) -> list[_CompiledPattern]:
     return compiled
 
 
-
-
 def extract_symbols(
     lines: list[str],
     lang: str,
     file_path: str = "",
 ) -> list[Symbol]:
-    """从源代码行列表中提取所有符号。"""
     compiled = _get_compiled(lang)
     if not compiled:
         return []
@@ -195,7 +177,6 @@ def extract_symbols(
         if not stripped:
             continue
         ls = stripped.lstrip()
-
         if ls.startswith("#") or ls.startswith("//") or ls.startswith("--"):
             continue
 
@@ -215,7 +196,6 @@ def extract_symbols(
                     indent=indent,
                 )
 
-
                 if cp.kind in ("class", "struct", "interface", "trait", "enum", "module", "namespace", "object"):
                     current_class = name
                 elif indent > 0 and current_class:
@@ -224,17 +204,12 @@ def extract_symbols(
                 symbols.append(sym)
                 break
 
-
     _calc_ranges(symbols, lines, lang)
 
     return symbols
 
 
 def iter_symbol_decls(line_iter, lang, file_path: str = "", max_symbols: int = MAX_SYMBOLS_PER_FILE):
-    """
-    流式扫描符号声明（line_end 置 0，不计算范围），用于大文件避免整文件载入内存。
-    line_iter 产出 (lineno, line) 元组。
-    """
     compiled = _get_compiled(lang)
     if not compiled:
         return []
@@ -267,17 +242,12 @@ def iter_symbol_decls(line_iter, lang, file_path: str = "", max_symbols: int = M
 
 
 def compute_symbol_end_from_chunk(chunk: list[str], lang: str, sym: Symbol) -> int:
-    """
-    在从 sym.line 起头的行块上复用 _calc_ranges 推算结束行，并映射回原文行号。
-    当块被截断（line_end == len(chunk)）时返回截断处，调用方应再按 total 收敛。
-    """
     temp = Symbol(kind=sym.kind, name=sym.name, line=1, indent=sym.indent)
     _calc_ranges([temp], chunk, lang)
     return sym.line - 1 + temp.line_end
 
 
 def _calc_ranges(symbols: list[Symbol], lines: list[str], lang: str):
-    """推算每个符号的结束行：花括号语言按配平计数，缩进语言按缩进扫描。"""
     if not symbols:
         return
 
@@ -288,11 +258,6 @@ def _calc_ranges(symbols: list[Symbol], lines: list[str], lang: str):
     n = len(lines)
 
     if lang in brace_langs:
-
-
-
-
-
         delta = [0] * n
         opens = [False] * n
         for j in range(n):
@@ -310,16 +275,9 @@ def _calc_ranges(symbols: list[Symbol], lines: list[str], lang: str):
         depth = [0] * (n + 1)
         for j in range(n):
             depth[j + 1] = depth[j] + delta[j]
-
         next_open = [n] * (n + 1)
         for j in range(n - 1, -1, -1):
             next_open[j] = j if opens[j] else next_open[j + 1]
-
-
-
-
-
-
 
         activate_at: dict[int, list[tuple[int, int]]] = {}
         activated: set[int] = set()
@@ -339,7 +297,6 @@ def _calc_ranges(symbols: list[Symbol], lines: list[str], lang: str):
                 if max_base is None or b > max_base:
                     max_base = b
             d_after = depth[j + 1]
-
             while max_base is not None and max_base >= d_after:
                 for idx in active.pop(max_base, ()):
                     end_of[idx] = j + 1
@@ -355,9 +312,6 @@ def _calc_ranges(symbols: list[Symbol], lines: list[str], lang: str):
             sym.line_end = max(e, sym.line)
     else:
         for sym in symbols:
-
-
-
             base_indent = sym.indent
             j0 = sym.line - 1
             header_end = j0
@@ -383,7 +337,6 @@ def _calc_ranges(symbols: list[Symbol], lines: list[str], lang: str):
                     end = j + 1
                 else:
                     break
-
             while end > sym.line and lines[end - 1].strip() == "":
                 end -= 1
             sym.line_end = max(end, sym.line)
@@ -395,7 +348,6 @@ def find_symbol_by_name(
     name: str,
     partial: bool = False,
 ) -> Optional[Symbol]:
-    """查找特定名称的符号（partial=True 时支持子串匹配）。"""
     syms = extract_symbols(lines, lang)
     for s in syms:
         if partial:
@@ -411,7 +363,6 @@ def find_containing_symbol(
     lang: str,
     target_line: int,
 ) -> Optional[Symbol]:
-    """查找包含 target_line 的最小范围符号。"""
     syms = extract_symbols(lines, lang)
     best: Optional[Symbol] = None
     best_size = float("inf")
@@ -426,13 +377,7 @@ def find_containing_symbol(
 
 
 def extract_imports(lines: list[str], lang: str) -> list[str]:
-    """提取 import 语句。"""
     imports: list[str] = []
-
-
-
-
-
 
     if lang == "go":
         in_block = False

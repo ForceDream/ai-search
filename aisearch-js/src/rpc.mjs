@@ -1,5 +1,4 @@
 
-
 import path from "node:path";
 
 
@@ -8,14 +7,13 @@ import * as engine from "./engine.mjs";
 import * as reader from "./reader.mjs";
 import { PyValueError, safe_int, abs_path } from "./util.mjs";
 
-
 export const MAX_LINE_BYTES = 1 * 1024 * 1024;
 
 export const METHODS = ["search", "symbols", "def", "ref", "read", "context", "anchor", "tree", "health"];
 
 
 export class RpcSession {
-
+  
   constructor(default_path = ".", boundary = "system") {
     this.default_path = default_path;
     this.boundary = boundary;
@@ -33,12 +31,9 @@ export class RpcSession {
   }
 
 
-
   handle(req) {
     const rid = req.id === undefined ? null : req.id;
     const method = req.method ?? "";
-
-
     let raw_params = req.params;
     let params;
     if (!raw_params || (Array.isArray(raw_params) && raw_params.length === 0)) {
@@ -62,11 +57,9 @@ export class RpcSession {
       const data = handler(params);
       return { id: rid, ok: true, data };
     } catch (e) {
-
       return { id: rid, ok: false, error: `${e.name}: ${e.message}` };
     }
   }
-
 
 
   _path(params) {
@@ -74,7 +67,7 @@ export class RpcSession {
   }
 
   _count_only(params, data) {
-
+    
     if (!params.count_only) return data;
     const out = { ...data };
     delete out.matches;
@@ -82,13 +75,12 @@ export class RpcSession {
   }
 
   _anchor() {
-
+    
     return this.boundary === "root" ? abs_path(this.default_path) : null;
   }
 
   _checkPath(params) {
-
-    const p = this._path(params);
+        const p = this._path(params);
     if (this.boundary === "root") {
       const base = abs_path(this.default_path);
       const root = abs_path(find_project_root(p));
@@ -147,6 +139,7 @@ export class RpcSession {
       params.limit ?? 50,
       null,
       params.partial === undefined ? true : Boolean(params.partial),
+      safe_int(params.offset ?? 0, 0, 0, 1e9),
     );
     return this._count_only(params, engine.symbol_response_to_dict(resp).data);
   }
@@ -160,6 +153,7 @@ export class RpcSession {
       null,
       params.limit ?? 50,
       params.substring_fallback === undefined ? true : Boolean(params.substring_fallback),
+      safe_int(params.offset ?? 0, 0, 0, 1e9),
     );
     return this._count_only(params, engine.symbol_response_to_dict(resp).data);
   }
@@ -192,7 +186,6 @@ export class RpcSession {
     if (!result.ok) throw new PyValueError(result.error);
     const data = reader.read_result_to_dict(result).data;
     if (params.line_numbers && data.content) {
-
       const start = (data.lines && data.lines.start) || 1;
       data.content = data.content.split("\n").map((ln, i) => `${start + i}: ${ln}`).join("\n");
       data.line_numbers = true;
@@ -242,19 +235,14 @@ export class RpcSession {
 
 
 export function run_rpc(root = null) {
-
-  const default_path = root ? root : ".";
+    const default_path = root ? root : ".";
   const boundary = root ? "root" : "system";
   const session = new RpcSession(default_path, boundary);
-
 
   process.stdout.on("error", (e) => {
     if (e.code === "EPIPE") process.exit(0);
     throw e;
   });
-
-
-
 
   const tooLarge = {
     id: null, ok: false,
@@ -299,13 +287,11 @@ export function run_rpc(root = null) {
         process.stdout.write(JSON.stringify(tooLarge) + "\n");
         continue;
       }
-
       const line = raw.toString("utf8").trim().replace(/^\uFEFF/, "").trim();
       if (!line) continue;
       handleLine(line);
     }
   });
-
 
   process.stdin.on("end", () => {
     if (buf.length && !dropping) {

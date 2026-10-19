@@ -1,18 +1,15 @@
 
-
 import fs from "node:fs";
 import path from "node:path";
 
 import { PyValueError, abs_path } from "./util.mjs";
 
-export const VERSION = "1.1.3";
-
-
+export const VERSION = "1.1.4";
 
 export const MAX_SEARCH_BYTES = 32 * 1024 * 1024;
 
 export function looks_binary(p, probe = 8192) {
-
+  
   let fd = null;
   try {
     fd = fs.openSync(p, "r");
@@ -38,7 +35,6 @@ export const DEFAULT_IGNORE = [
   ".DS_Store", "Thumbs.db",
   "vendor", "Pods", ".next", ".nuxt",
 ];
-
 
 export const EXT_LANG = {
   ".py": "python", ".pyi": "python",
@@ -80,7 +76,6 @@ export const EXT_LANG = {
 };
 
 
-
 export function detect_lang(p) {
   const s = String(p);
   const name = path.basename(s).toLowerCase();
@@ -95,8 +90,6 @@ export function detect_lang(p) {
 
 
 export function should_ignore(name, ignore_list, rel_path = "") {
-
-
   const rel_norm = rel_path ? rel_path.replace(/\\/g, "/") : "";
   for (const pat of ignore_list) {
     const pat_norm = pat.replace(/\\/g, "/");
@@ -126,7 +119,6 @@ export function find_project_root(start = ".") {
       try {
         if (fs.existsSync(path.join(cur, m))) return cur;
       } catch {
-
       }
     }
     const parent = path.dirname(cur);
@@ -137,7 +129,7 @@ export function find_project_root(start = ".") {
 
 
 function _read_ignore_file(ignore_file) {
-
+  
   if (!fs.existsSync(ignore_file)) return [];
   let text;
   try {
@@ -162,13 +154,13 @@ export function load_extra_ignore(root) {
 
 
 export function load_vcs_ignore(root) {
-
+  
   return _read_ignore_file(path.join(root, ".gitignore"));
 }
 
 
 export function is_hidden(name) {
-
+  
   return name.startsWith(".") && name !== "." && name !== "..";
 }
 
@@ -190,8 +182,7 @@ export function is_relative_to(p, other) {
 
 
 export function safe_resolve(ref, root, boundary = "root") {
-
-  const ref_str = String(ref);
+    const ref_str = String(ref);
   if (ref_str.includes("\x00")) {
     throw new PyValueError("Path contains NUL byte");
   }
@@ -208,9 +199,7 @@ export function safe_resolve(ref, root, boundary = "root") {
   return full;
 }
 
-
 export function detect_encoding(buf) {
-
   if (buf.length >= 3 && buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF) return "utf-8";
   if (buf.length >= 2 && buf[0] === 0xFF && buf[1] === 0xFE) return "utf-16le";
   if (buf.length >= 2 && buf[0] === 0xFE && buf[1] === 0xFF) return "utf-16be";
@@ -219,14 +208,12 @@ export function detect_encoding(buf) {
     u8.decode(buf);
     return "utf-8";
   } catch {
-
   }
   const gbk = new TextDecoder("gb18030", { fatal: true });
   try {
     gbk.decode(buf);
     return "gb18030";
   } catch {
-
   }
   return "utf-8";
 }
@@ -246,13 +233,11 @@ export function decode_buffer(buf) {
   try {
     return u8.decode(buf);
   } catch {
-
   }
   const gbk = new TextDecoder("gb18030", { fatal: true });
   try {
     return gbk.decode(buf);
   } catch {
-
   }
   return new TextDecoder("utf-8", { fatal: false }).decode(buf);
 }
@@ -274,15 +259,13 @@ export function detect_encoding_path(p, chunk = 65536) {
     try {
       fs.closeSync(fd);
     } catch {
-
     }
   }
 }
 
 
 export function build_file_list(root, extensions = null, ignore = null) {
-
-  if (!ignore) ignore = DEFAULT_IGNORE;
+    if (!ignore) ignore = DEFAULT_IGNORE;
   const root_abs = abs_path(root);
   const files = [];
 
@@ -296,15 +279,9 @@ export function build_file_list(root, extensions = null, ignore = null) {
     const dirnames = [];
     const filenames = [];
     for (const d of dirents) {
-
-
-
-
       if (d.isDirectory()) dirnames.push(d.name);
       else filenames.push(d.name);
     }
-
-
 
     const kept_dirs = dirnames
       .filter((dn) => {

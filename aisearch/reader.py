@@ -26,20 +26,14 @@ from .symbols import (
     iter_symbol_decls,
 )
 
-
 MAX_FILE_BYTES = 5 * 1024 * 1024
 
-
 PREVIEW_LINES = 200
-
 
 SYMBOL_SCAN_CAP = 200_000
 
 
 def _file_nf_error(root: Path, full: Path) -> str:
-    """File not found 的可行动提示：file 里重复带了 root 最后一级目录名
-    （如 --root=.../my-project/src 却传 src/app.py，双写 src/）
-    是高频误用——给出建议路径而不是只报 not found。"""
     msg = f"File not found: {full}"
     try:
         rel = full.relative_to(root)
@@ -53,19 +47,16 @@ def _file_nf_error(root: Path, full: Path) -> str:
         pass
     return msg
 
-
 MAX_CONTENT_CHARS = 200_000
 
 
 def _cap_content(text: str) -> tuple[str, bool]:
-    """截断过长的正文，返回 (正文, 是否被截断)。"""
     if len(text) <= MAX_CONTENT_CHARS:
         return text, False
     return text[:MAX_CONTENT_CHARS], True
 
 
 def _is_binary(full: Path) -> bool:
-    """无 BOM 且头部含 NUL 字节 → 视为二进制，避免按文本读出乱码。"""
     try:
         with open(full, "rb") as f:
             head = f.read(8192)
@@ -111,11 +102,9 @@ class ReadResult:
     error: str = ""
 
     def __post_init__(self):
-
         self.content, capped = _cap_content(self.content)
         if capped:
             self.truncated = True
-
             kept = self.content.count("\n") + 1
             if self.start:
                 self.end = min(self.end, self.start + kept - 1)
@@ -136,14 +125,10 @@ class ReadResult:
             d["data"]["language"] = self.language
         if self.symbol:
             d["data"]["symbol"] = self.symbol
-
-
         if self.symbols:
             d["data"]["symbols"] = self.symbols
         if self.truncated:
             d["data"]["truncated"] = True
-
-
         return d
 
 
@@ -170,8 +155,6 @@ class ContextResult:
     def to_dict(self) -> dict:
         if not self.ok:
             return {"ok": False, "error": self.error}
-
-
         d: dict = {
             "ok": True,
             "data": {
@@ -197,10 +180,7 @@ class ContextResult:
         return d
 
 
-
-
 def _iter_lines(path: Path, encoding: str) -> Iterator[str]:
-    """按行流式产出（不含行终止符），避免整文件载入内存。"""
     with open(path, "rb") as fb:
         with io.TextIOWrapper(
             io.BufferedReader(fb), encoding=encoding, errors="replace", newline=""
@@ -214,7 +194,6 @@ def _iter_lines(path: Path, encoding: str) -> Iterator[str]:
 
 
 def _stream_read_range(path: Path, encoding: str, start: int, end: int) -> str:
-    """流式读取 [start, end] 行（1-based，闭区间），只保留该区间，O(范围) 内存。"""
     out: list[str] = []
     for i, ln in enumerate(_iter_lines(path, encoding), start=1):
         if i < start:
@@ -230,7 +209,6 @@ def _stream_count_lines(path: Path, encoding: str) -> int:
 
 
 def _stream_head(path: Path, encoding: str, preview: int) -> tuple[str, int, bool]:
-    """返回（头部文本, 总行数, 是否被截断）。"""
     keep: list[str] = []
     total = 0
     for ln in _iter_lines(path, encoding):
@@ -241,7 +219,6 @@ def _stream_head(path: Path, encoding: str, preview: int) -> tuple[str, int, boo
 
 
 def _stream_read_chunk(path: Path, encoding: str, start_line: int, cap: int) -> list[str]:
-    """从 start_line 起读取最多 cap 行，用于推算单个符号的范围。"""
     out: list[str] = []
     for i, ln in enumerate(_iter_lines(path, encoding), start=1):
         if i < start_line:
@@ -253,7 +230,6 @@ def _stream_read_chunk(path: Path, encoding: str, start_line: int, cap: int) -> 
 
 
 def _scan_decls_stream(path: Path, encoding: str, lang: Optional[str]) -> list[Symbol]:
-    """流式扫描符号声明（含行号，不含范围）。"""
     if not lang:
         return []
 
@@ -264,23 +240,11 @@ def _scan_decls_stream(path: Path, encoding: str, lang: Optional[str]) -> list[S
     return iter_symbol_decls(gen(), lang)
 
 
-
-
 def _resolve_path(
     file_ref: str,
     root: Path,
     boundary: str = "root",
 ) -> tuple[Path, Optional[int], Optional[int], Optional[str]]:
-    """
-    解析多种文件引用格式：
-      path/to/file.py
-      path/to/file.py:10-50
-      path/to/file.py:42
-      path/to/file.py#symbol_name
-
-    若整个引用本身就是一个存在的文件（文件名含 # 或 : 的场景），直接按普通路径处理。
-    """
-
     try:
         as_whole = safe_resolve(file_ref, root, boundary=boundary)
         if as_whole.is_file():
@@ -299,8 +263,6 @@ def _resolve_path(
             raise ValueError(f"Empty symbol name after '#' in file reference: {file_ref}")
 
     if ":" in path_part:
-
-
         ci = path_part.rfind(":")
         if ci == 1 and path_part[0].isalpha() and (
             len(path_part) < 3 or path_part[2] in ("\\", "/")
@@ -337,7 +299,6 @@ def _read_symbol_from_lines(
     lines: list[str], rel: str, lang: Optional[str], symbol_name: str, total: int,
     human: bool = False,
 ) -> ReadResult:
-    """中小文件：在已载入的行上做符号解析（原逻辑）。"""
     syms = extract_symbols(lines, lang, rel) if lang else []
     sym = None
     if lang:
@@ -377,7 +338,6 @@ def _read_symbol_large(
     full: Path, rel: str, lang: Optional[str], symbol_name: str, encoding: str,
     human: bool = False,
 ) -> ReadResult:
-    """大文件：流式扫描声明 → 定位目标 → 流式推算范围与内容。"""
     if not lang:
         return ReadResult(ok=False, file=rel, error=f"Symbol '{symbol_name}' not found (no language)")
     decls = _scan_decls_stream(full, encoding, lang)
@@ -424,21 +384,11 @@ def read_file(
     human: bool = False,
     anchor: Optional[Path] = None,
 ) -> ReadResult:
-    """
-    读取文件，支持多种引用格式。
-    outline_only=True 时只返回符号大纲，不返回内容。
-    boundary="root" 时限制在项目根目录内；"system" 允许任意路径。
-    anchor 非空时以其为根（相对引用与越权校验都按它算；rpc --root 锁定时传入）。
-    human=True 时按符号读取会附带整文件符号大纲（供人/文本渲染）；
-    AI（rpc）保持 False，省去人类专属的大纲上下文与 token。
-    """
     root = anchor if anchor is not None else find_project_root(path)
     try:
         full, start_line, end_line, symbol_name = _resolve_path(file_ref, root, boundary=boundary)
     except ValueError as e:
         return ReadResult(ok=False, error=str(e))
-
-
 
     try:
         st = full.stat()
@@ -453,13 +403,11 @@ def read_file(
     lang = detect_lang(full)
     large = st.st_size > MAX_FILE_BYTES
 
-
     if _is_binary(full):
         return ReadResult(
             ok=False, file=rel, language=lang, total_lines=0,
             error=f"Binary file ({st.st_size} bytes); not text",
         )
-
 
     if symbol_name:
         if large:
@@ -469,7 +417,6 @@ def read_file(
         lines = text.splitlines()
         total = len(lines)
         return _read_symbol_from_lines(lines, rel, lang, symbol_name, total, human=human)
-
 
     if outline_only:
         if large:
@@ -490,13 +437,11 @@ def read_file(
             content="", symbols=[x.to_dict() for x in syms],
         )
 
-
     if start_line and end_line and start_line > end_line:
         return ReadResult(
             ok=False, file=rel, language=lang,
             error=f"Invalid line range: {start_line} > {end_line}",
         )
-
 
     if large:
         enc = detect_encoding(full)
@@ -517,7 +462,6 @@ def read_file(
             start=1, end=min(PREVIEW_LINES, total), total_lines=total,
             content=content, truncated=truncated,
         )
-
 
     try:
         text = read_text_auto(full)
@@ -546,8 +490,6 @@ def read_file(
     )
 
 
-
-
 def get_context(
     file_ref: str,
     line: int,
@@ -557,20 +499,12 @@ def get_context(
     human: bool = False,
     anchor: Optional[Path] = None,
 ) -> ContextResult:
-    """
-    获取某一行的丰富上下文。
-    anchor 语义同 read_file：rpc --root 锁定时以其为根，不再向上找项目标记目录。
-    human=True 时附带整文件符号大纲（供人/文本渲染）；AI（rpc）保持 False。
-    """
     root = anchor if anchor is not None else find_project_root(path)
-
-
 
     try:
         full, _s, _e, _sym = _resolve_path(file_ref, root, boundary=boundary)
     except ValueError as e:
         return ContextResult(ok=False, error=str(e))
-
 
     try:
         st = full.stat()
@@ -581,20 +515,17 @@ def get_context(
     if not _stat_mod.S_ISREG(st.st_mode):
         return ContextResult(ok=False, error=f"Not a file: {full}")
 
-
     radius = max(0, min(int(radius), 200))
 
     rel = _rel(root, full)
     lang = detect_lang(full)
     large = st.st_size > MAX_FILE_BYTES
 
-
     if _is_binary(full):
         return ContextResult(
             ok=False, file=rel, language=lang, line=line,
             error=f"Binary file ({st.st_size} bytes); not text",
         )
-
 
     if large:
         enc = detect_encoding(full)
@@ -609,7 +540,6 @@ def get_context(
             total_lines=total, window_start=window_start,
         )
 
-
     try:
         text = read_text_auto(full)
     except (OSError, PermissionError) as e:
@@ -620,22 +550,18 @@ def get_context(
     if line < 1 or line > total:
         return ContextResult(ok=False, error=f"Line {line} out of range (1-{total})")
 
-
     containing_sym = None
     if lang:
         sym = find_containing_symbol(lines, lang, line)
         if sym:
             containing_sym = sym.to_dict()
 
-
     imports = extract_imports(lines, lang) if lang else []
-
 
     outline = []
     if lang and human:
         syms = extract_symbols(lines, lang, rel)
         outline = [s.to_dict() for s in syms]
-
 
     ctx_start = max(0, line - 1 - radius)
     ctx_end = min(total, line + radius)
@@ -654,20 +580,12 @@ def get_context(
     )
 
 
-
-
-
 def content_sha(text: str) -> str:
-    """范围正文摘要：统一换行、去行尾空白后 sha256 前 16 位。
-
-    与 model-switch-or-resume 的块 sha 同口径——两边的校验可以互相对拍。
-    """
     norm = "\n".join(l.rstrip() for l in text.replace("\r\n", "\n").replace("\r", "\n").split("\n"))
     return hashlib.sha256(norm.encode("utf-8")).hexdigest()[:16]
 
 
 def _pick_symbol(syms: list, name: str):
-    """按名字取符号：精确同名优先，唯一子串命中次之，多个子串命中报歧义。"""
     exact = [s for s in syms if s.name == name]
     if exact:
         return exact[0]
@@ -690,15 +608,6 @@ def anchor(
     symbol: Optional[str] = None,
     line: Optional[int] = None,
 ) -> dict:
-    """写入定位锚点：把目标范围解析成可校验的定位信息。
-
-    目标范围三选一（也可写在 file 里）：`file#符号` / `file:A-B` / `line`（取所在符号，无符号则单行）。
-    返回 {file, lines{start,end}, total_lines, sha, head, tail, symbol?}：
-      sha   范围正文摘要（content_sha 口径，写后可复算）
-      head/tail  范围首行/末行（截断 80 字符），肉眼复核落点用
-    用法：写前调一次记下 {start,end,sha}；写后同参再调一次——
-      start/end 与预期一致且 sha 按预期变化 = 落点正确；start/end 漂了 = 定位偏了。
-    """
     root = anchor_root if anchor_root is not None else find_project_root(path)
     ref = file_ref
     if symbol and "#" not in ref:

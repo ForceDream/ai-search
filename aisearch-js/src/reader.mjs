@@ -1,5 +1,6 @@
 ﻿
 
+
 import fs from "node:fs";
 import path from "node:path";
 
@@ -22,28 +23,24 @@ import {
 } from "./symbols.mjs";
 import { PyValueError, abs_path, py_int, rstrip, splitLines } from "./util.mjs";
 
-
 export const MAX_FILE_BYTES = 5 * 1024 * 1024;
-
 
 const PREVIEW_LINES = 200;
 
-
 const SYMBOL_SCAN_CAP = 200_000;
-
 
 export const MAX_CONTENT_CHARS = 200_000;
 
 
 export function _cap_content(text) {
-
+  
   if (text.length <= MAX_CONTENT_CHARS) return [text, false];
   return [text.slice(0, MAX_CONTENT_CHARS), true];
 }
 
 
 export function _is_binary(full) {
-
+  
   let fd;
   try {
     fd = fs.openSync(full, "r");
@@ -65,21 +62,16 @@ export function _is_binary(full) {
     try {
       fs.closeSync(fd);
     } catch {
-
     }
   }
 }
 
 
-
-
 export function read_result_to_dict(r) {
   if (!r.ok) return { ok: false, error: r.error };
-
   const [content, capped] = _cap_content(r.content ?? "");
   let end = r.end;
   if (capped && r.start) {
-
     const kept = (content.match(/\n/g) || []).length + 1;
     end = Math.min(end, r.start + kept - 1);
   }
@@ -94,19 +86,14 @@ export function read_result_to_dict(r) {
   };
   if (r.language) d.data.language = r.language;
   if (r.symbol) d.data.symbol = r.symbol;
-
   if (r.symbols.length) d.data.symbols = r.symbols;
   if (r.truncated || capped) d.data.truncated = true;
-
-
   return d;
 }
 
 export function context_result_to_dict(r) {
   if (!r.ok) return { ok: false, error: r.error };
   const [content, capped] = _cap_content(r.content ?? "");
-
-
   const d = {
     ok: true,
     data: {
@@ -125,8 +112,6 @@ export function context_result_to_dict(r) {
   return d;
 }
 
-
-
 function file_nf_error(root, full) {
   let msg = `File not found: ${full}`;
   try {
@@ -138,7 +123,7 @@ function file_nf_error(root, full) {
         msg += ` (looks double-prefixed with the root's last segment '${parts[0]}/'; try file "${parts.slice(1).join('/')}")`;
       }
     }
-  } catch { }
+  } catch {  }
   return msg;
 }
 
@@ -159,10 +144,8 @@ function fail_ctx(error, extra = {}) {
 }
 
 
-
-
 function* iter_lines_sync(p, encoding) {
-
+  
   const fd = fs.openSync(p, "r");
   try {
     const CHUNK = 1 << 20;
@@ -191,7 +174,6 @@ function* iter_lines_sync(p, encoding) {
     try {
       fs.closeSync(fd);
     } catch {
-
     }
   }
 }
@@ -249,11 +231,8 @@ function scan_decls_stream(p, encoding, lang) {
 }
 
 
-
-
 export function _resolve_path(file_ref, root, boundary = "root") {
-
-
+  
   try {
     const as_whole = safe_resolve(file_ref, root, boundary);
     try {
@@ -261,10 +240,8 @@ export function _resolve_path(file_ref, root, boundary = "root") {
         return [as_whole, null, null, null];
       }
     } catch {
-
     }
   } catch {
-
   }
 
   let path_part = file_ref;
@@ -283,7 +260,6 @@ export function _resolve_path(file_ref, root, boundary = "root") {
 
   if (path_part.includes(":")) {
     const i = path_part.lastIndexOf(":");
-
     const is_drive =
       i === 1 &&
       /[a-zA-Z]/.test(path_part[0]) &&
@@ -414,7 +390,7 @@ function read_symbol_large(full, rel, lang, symbol_name, encoding, human = false
 
 
 export function read_file(file_ref, path_arg = ".", outline_only = false, boundary = "root", human = false, anchor = null) {
-
+  
   const root = anchor ? abs_path(anchor) : find_project_root(path_arg);
   let full, start_line, end_line, symbol_name;
   try {
@@ -437,13 +413,11 @@ export function read_file(file_ref, path_arg = ".", outline_only = false, bounda
   const lang = detect_lang(full);
   const large = st.size > MAX_FILE_BYTES;
 
-
   if (_is_binary(full)) {
     return fail_read(`Binary file (${st.size} bytes); not text`, {
       file: rel, language: lang,
     });
   }
-
 
   if (symbol_name) {
     if (large) {
@@ -459,7 +433,6 @@ export function read_file(file_ref, path_arg = ".", outline_only = false, bounda
     const lines = splitLines(text);
     return read_symbol_from_lines(lines, rel, lang, symbol_name, lines.length, human);
   }
-
 
   if (outline_only) {
     if (large) {
@@ -491,14 +464,12 @@ export function read_file(file_ref, path_arg = ".", outline_only = false, bounda
     };
   }
 
-
   if (start_line && end_line && start_line > end_line) {
     const r = fail_read(`Invalid line range: ${start_line} > ${end_line}`);
     r.file = rel;
     r.language = lang;
     return r;
   }
-
 
   if (large) {
     const enc = detect_encoding_path(full);
@@ -522,7 +493,6 @@ export function read_file(file_ref, path_arg = ".", outline_only = false, bounda
       symbol: null, symbols: [], truncated, error: "",
     };
   }
-
 
   let text;
   try {
@@ -557,13 +527,9 @@ export function read_file(file_ref, path_arg = ".", outline_only = false, bounda
 }
 
 
-
-
 export function get_context(file_ref, line, path_arg = ".", radius = 5, boundary = "root", human = false, anchor = null) {
-
+  
   const root = anchor ? abs_path(anchor) : find_project_root(path_arg);
-
-
 
   let full;
   try {
@@ -582,7 +548,6 @@ export function get_context(file_ref, line, path_arg = ".", radius = 5, boundary
     return fail_ctx(`Not a file: ${full}`);
   }
 
-
   const r_parsed = py_int(radius);
   if (r_parsed === null) {
     throw new PyValueError(`invalid literal for int() with base 10: '${radius}'`);
@@ -593,13 +558,11 @@ export function get_context(file_ref, line, path_arg = ".", radius = 5, boundary
   const lang = detect_lang(full);
   const large = st.size > MAX_FILE_BYTES;
 
-
   if (_is_binary(full)) {
     return fail_ctx(`Binary file (${st.size} bytes); not text`, {
       file: rel, language: lang, line,
     });
   }
-
 
   if (large) {
     const enc = detect_encoding_path(full);
@@ -617,7 +580,6 @@ export function get_context(file_ref, line, path_arg = ".", radius = 5, boundary
     };
   }
 
-
   let text;
   try {
     text = decode_buffer(fs.readFileSync(full));
@@ -631,23 +593,19 @@ export function get_context(file_ref, line, path_arg = ".", radius = 5, boundary
     return fail_ctx(`Line ${line} out of range (1-${total})`);
   }
 
-
   let containing_sym = null;
   if (lang) {
     const sym = find_containing_symbol(lines, lang, line);
     if (sym) containing_sym = symbol_to_dict(sym);
   }
 
-
   const imports = lang ? extract_imports(lines, lang) : [];
-
 
   let outline = [];
   if (lang && human) {
     const syms = extract_symbols(lines, lang, rel);
     outline = syms.map(symbol_to_dict);
   }
-
 
   const ctx_start = Math.max(0, line - 1 - radius);
   const ctx_end = Math.min(total, line + radius);
@@ -659,9 +617,6 @@ export function get_context(file_ref, line, path_arg = ".", radius = 5, boundary
     imports, outline, total_lines: total, window_start: ctx_start + 1, error: "",
   };
 }
-
-
-
 
 
 import { createHash } from "node:crypto";

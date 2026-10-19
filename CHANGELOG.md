@@ -1,5 +1,17 @@
 # aisearch 更新日志
 
+## [1.1.4] - 2026-10-19 · 功能版（def/symbols 分页与截断披露）
+
+### 新增
+
+- `def` / `symbols` 支持 `offset` 分页（与 search/ref 同口径）：结果被 `limit` 截断时响应带 `truncated:true` 与 `next_offset`，带 `offset` 续读。此前两者截断完全静默——`total` 被 limit 截断且无任何披露字段，大仓/多树语料上字典序后段的定义不可见
+- `def` 分页按扫描序翻窗、排序只作用于页内：若先全局排序再切窗，每页收集池长度不同导致窗口错位；`offset=0` 的返回集合与页内排序均与旧版一致
+- `--format text` 渲染器为 def/symbols 块头输出 `next_offset` / `truncated`
+
+### 文档
+
+- SKILL.md / protocol.md 明示：`def`/`symbols` 默认 `limit=50`（可手动调大，钳制上限 5000；`ref` 默认 100）、`total` 是本次返回条数不是存在总数（`total:50` 读作“≥50”）、截断披露字段语义与翻页方法；FAQ 增加“只返回 50 条”条目
+
 ## [1.1.3] - 2026-10-16 · 清理版（死代码）
 
 ### 清理
@@ -9,8 +21,6 @@
 - 删除 `Match.symbol` 残留字段（从未被赋值，响应中 `symbol` 分支不可达；Python / Node 同步）
 
 ## [1.1.2] - 2026-10-13 · 功能版（写入定位）
-
-针对「写入定位不准、连续编辑串行」：把定位从"数行号"变成可校验的锚点。
 
 ### 新增
 
@@ -61,8 +71,6 @@
 
 ## [1.0.3] - 2026-09-22 · 中等问题修复（性能与健壮性）
 
-评估报告点名的 4 个中等问题全部修复，双实现同步；验证脚本新增 3 个（`D:\llm\eval\`，不随技能分发）。
-
 ### 性能
 
 - **`def` 找不到时全仓扫两遍 → 单遍**：旧实现先跑 exact 遍，无命中再跑 substring 遍（目录枚举、文件读取、符号抽取全部做两次）。改为一次遍历同时收两类候选，早停条件与原 exact 遍严格一致（exact 满即停），substring 候选仅在 **exact 仍为空** 时收集（避免命中场景白付子串判定成本）。**实测 ZCode-main（4200 文件）：`def` 未命中 13.72s → 7.41s（−46%）**；命中与 `symbols` 场景在噪声内持平（±6%）。
@@ -79,15 +87,7 @@
 - **rpc 1MB 行上限后置**：旧实现（Python 文本迭代 / Node `readline`）先把整行读进内存再判上限，一行几百 MB 的无换行输入足以打爆内存。改为按块读**字节流**：累积超限且未见换行即进入丢弃模式直到下一个换行，内存上界 = 上限 + 一个块；长度口径统一为**字节**（与常量名一致）。已验证超长行报错、丢弃后会话正常复位、两侧行为一致。
 - 附带清理：`rpc.mjs` 移除不再使用的 `readline` 导入；`find_definition` 与 `search_symbols` 的扫描范围解析收敛到 `_resolve_scan_scope` 一处（与 `engine.py` 同构）。
 
-### 验证脚本（新增）
-
-- `aisearch-old-vs-new.py`：以独立工具版（改动前状态）为基线，在大仓上逐字段比对（忽略 `elapsed_ms` / `files_searched`）。首跑即抓到本轮重写的一个真实 bug（激活行基准深度取错，`facade` 的 `line_end` 42 vs 56），修正后边界语料 11/11、大仓 7/7、宽覆盖 2000 符号全 PASS。
-- `aisearch-perf.py`：旧版/新版耗时对比（`def-miss`/`def-hit`/`symbols`）。
-- `aisearch-rpc-guard.py`：超长行防护断言（直测 rpc 子进程；包装脚本 `aisearch_rpc.py --stdin` 会先逐行解析 JSON，测不到协议层）。
-
 ## [1.0.2] - 2026-09-22 · 缺陷修复（双实现漂移专项）
-
-对拍脚本（`D:\llm\eval\aisearch-parity-check.py`，同语料跑 Python/Node 两版全方法逐字段比对）首跑即抓到 4 处双实现分叉，全部修复；17/17 用例双语料通过。
 
 ### 逻辑错误修复
 
@@ -102,8 +102,6 @@
 - 对拍脚本落位 `D:\llm\eval\aisearch-parity-check.py`（不随技能分发）：17 条默认用例覆盖 8 个方法 + 历史踩坑点（元字符 ref / `$` 前缀 / whole_word / ignore / 子串回退 / outline / 行范围 / 符号读取），任何一版改动后重跑即可防再次漂移。
 
 ## [1.0.1] - 2026-09-20 · 缺陷修复
-
-缺陷修复版：修掉 6 个实测确认的逻辑错误 + 4 处文档不一致，未新增功能。
 
 ### 逻辑错误修复
 
@@ -121,11 +119,11 @@
 - `references/examples.md`：search 示例只列 1 条 match 却标 `total: 3` → 标注省略。
 - `SKILL.md`：补充 `find_project_root` 会向上找 marker 的提示（`--root` 传子目录时 root 可能被解析到更高层，导致 escapes 误判）。
 
-### 文档改进（已入库，随下次发版生效）
+### 文档改进
 
 - `SKILL.md` 顶部新增「什么时候用我（触发词）」与最短上手命令。
 - 新增「常见问题（FAQ）」，含**错误信息 → 怎么办**对照表（`Missing 'pattern'`、`escapes project root`、`Binary file; not text`、`truncated: true` 等）。
 
-### 代码修正（已入库，随下次发版生效）
+### 代码修正
 
 - **`context` 输出字段重排**：metadata（`file` / `line` / `language` / `containing_symbol` / `imports` / `total_lines` / `window_start` / `truncated`）前置、大体积的 `content` 殿后。此前 `content` 排在 `containing_symbol` 之前，Agent 只解析 JSON 前段就误判「Rust 没有 containing_symbol」（实测报告曾误报此缺口，实际 Rust 一直正常返回）。Python / Node 双实现同步。

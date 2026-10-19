@@ -25,7 +25,6 @@ from pathlib import Path
 from . import __version__, engine, reader
 from .config import find_project_root, is_relative_to
 
-
 MAX_LINE_BYTES = 1 * 1024 * 1024
 
 _METHODS = ("search", "symbols", "def", "ref", "read", "context", "anchor", "tree", "health")
@@ -40,12 +39,10 @@ def _clamp(value, default, lo, hi):
 
 
 class RpcSession:
-    """一次 rpc 会话：持有默认路径与边界策略。"""
 
     def __init__(self, default_path: str = ".", boundary: str = "system"):
         self.default_path = default_path
         self.boundary = boundary
-
 
 
     def handle(self, req: dict) -> dict:
@@ -68,30 +65,21 @@ class RpcSession:
         return {"id": rid, "ok": True, "data": data}
 
 
-
     def _path(self, params: dict) -> str:
         return params.get("path") or self.default_path
 
     @staticmethod
     def _count_only(params: dict, data: dict) -> dict:
-        """count_only=true：丢弃 matches 只留统计字段，定位型查询不回正文。"""
         if not params.get("count_only"):
             return data
         return {k: v for k, v in data.items() if k != "matches"}
 
     def _anchor(self) -> Path | None:
-        """读取类方法的根锚点：boundary=root 时以锁定的 root 为基准。"""
         if self.boundary != "root":
             return None
         return Path(self.default_path).resolve()
 
     def _check_path(self, params: dict) -> str:
-        """
-        boundary=root 时校验查询路径锁定在本项目内，防止通过
-        path=/ 或 ../../ 越权枚举任意目录（search/symbols/def/ref/tree）。
-        校验 find_project_root 的结果：所有文件读取都发生在该 root 下，
-        它在界内则整个查询面在界内。
-        """
         p = self._path(params)
         if self.boundary == "root":
             base = Path(self.default_path).resolve()
@@ -138,6 +126,7 @@ class RpcSession:
             kind=params.get("kind"),
             max_results=params.get("limit", 50),
             partial=bool(params.get("partial", True)),
+            offset=_clamp(params.get("offset", 0), 0, 0, 10**9),
         )
         return self._count_only(params, resp.to_dict()["data"])
 
@@ -150,6 +139,7 @@ class RpcSession:
             self._check_path(params),
             max_results=params.get("limit", 50),
             substring_fallback=bool(params.get("substring_fallback", True)),
+            offset=_clamp(params.get("offset", 0), 0, 0, 10**9),
         )
         return self._count_only(params, resp.to_dict()["data"])
 
@@ -182,7 +172,6 @@ class RpcSession:
             raise ValueError(result.error)
         data = result.to_dict()["data"]
         if params.get("line_numbers") and data.get("content"):
-
             start = (data.get("lines") or {}).get("start") or 1
             data["content"] = "\n".join(
                 f"{i}: {ln}" for i, ln in enumerate(data["content"].split("\n"), start=start)
@@ -228,12 +217,6 @@ class RpcSession:
 
 
 def run_rpc(root: str | None = None):
-    """
-    运行 stdio 循环。root 非空时锁定项目根并启用 boundary=root；
-    否则以 cwd 为默认路径，boundary=system（与 CLI 同级信任）。
-    """
-
-
     try:
         sys.stdin.reconfigure(encoding="utf-8", errors="replace")
         sys.stdout.reconfigure(encoding="utf-8")
@@ -248,7 +231,6 @@ def run_rpc(root: str | None = None):
     stdout = sys.stdout
 
     def _emit(resp: dict) -> None:
-
         stdout.write(json.dumps(resp, ensure_ascii=False, separators=(",", ":")) + "\n")
         stdout.flush()
 
@@ -263,10 +245,6 @@ def run_rpc(root: str | None = None):
         _emit(session.handle(req))
 
     try:
-
-
-
-
         buf = b""
         dropping = False
         too_large = {"id": None, "ok": False,
@@ -293,13 +271,11 @@ def run_rpc(root: str | None = None):
                 if len(raw) > MAX_LINE_BYTES:
                     _emit(too_large)
                     continue
-
                 line = raw.decode("utf-8", errors="replace").strip().lstrip("\ufeff").strip()
                 if not line:
                     continue
                 _handle_line(line)
         if buf and not dropping:
-
             if len(buf) > MAX_LINE_BYTES:
                 _emit(too_large)
             else:
@@ -307,7 +283,6 @@ def run_rpc(root: str | None = None):
                 if line:
                     _handle_line(line)
     except BrokenPipeError:
-
         return
     except KeyboardInterrupt:
         return

@@ -1,5 +1,4 @@
 
-
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -22,9 +21,8 @@ import { extract_symbols, find_containing_symbol, symbol_to_dict } from "./symbo
 import { abs_path, escape_regex, rstrip, rstrip_nl, round1, safe_int, splitLines } from "./util.mjs";
 
 
-
 function _skip_reason(full) {
-
+  
   try {
     if (fs.statSync(full).size > MAX_SEARCH_BYTES) return "size";
   } catch {
@@ -46,8 +44,7 @@ export function match_to_dict(m) {
 }
 
 function _byte_offset_to_col(text, byteOff) {
-
-  if (byteOff <= 0) return 0;
+    if (byteOff <= 0) return 0;
   let acc = 0;
   let i = 0;
   for (const ch of text) {
@@ -103,9 +100,10 @@ export function symbol_response_to_dict(r) {
   };
   if (r.match_mode) data.match_mode = r.match_mode;
   if (r.skipped) data.skipped = r.skipped;
+  if (r.next_offset !== null && r.next_offset !== undefined) data.next_offset = r.next_offset;
+  if (r.truncated) data.truncated = true;
   return { ok: true, data };
 }
-
 
 
 export const MAX_RESULTS_CAP = 5000;
@@ -113,17 +111,13 @@ export const MAX_TREE_DEPTH = 16;
 export const MAX_CONTEXT_LINES = 200;
 export const MAX_PATTERN_LEN = 256;
 
-
 const REDOS_RE = /\([^()]*[*+][^()]*\)\s*(?:[*+]|\{\d+,\})/;
-
-
 
 
 let _has_rg = null;
 
 export function has_ripgrep() {
   if (_has_rg === null) {
-
     if (process.env.AISEARCH_NO_RG) {
       _has_rg = false;
       return _has_rg;
@@ -137,8 +131,6 @@ export function has_ripgrep() {
   }
   return _has_rg;
 }
-
-
 
 
 export function _search_with_rg(
@@ -157,13 +149,8 @@ export function _search_with_rg(
   if (extensions) {
     for (const ext of extensions) cmd.push("-g", `*${ext}`);
   }
-
   for (const ig of ignore) cmd.push("--glob", `!${ig}`);
-
-
-
   cmd.push("-e", literal ? escape_regex(pattern) : pattern);
-
   cmd.push(scope ? path.relative(root, scope) : ".");
 
   let proc;
@@ -182,7 +169,6 @@ export function _search_with_rg(
     return fail_response("Search timed out (30s)");
   }
 
-
   const returncode = proc.status;
   if (returncode !== 0 && returncode !== 1) {
     const err_lines = (proc.stderr || "").trim().split("\n").filter(Boolean);
@@ -197,10 +183,6 @@ export function _search_with_rg(
   let current_file = "";
   const file_matches = [];
   const ctx_lines = new Map();
-
-
-
-
 
   const attachContext = () => {
     if (context_lines > 0) {
@@ -235,7 +217,6 @@ export function _search_with_rg(
     const data = msg.data ?? {};
 
     if (msg_type === "begin") {
-
       attachContext();
       current_file = (data.path && data.path.text) || "";
       files_searched.add(current_file);
@@ -245,7 +226,6 @@ export function _search_with_rg(
       const line_num = data.line_number ?? 0;
       const line_content = rstrip_nl((data.lines && data.lines.text) || "");
       const subs = data.submatches ?? [];
-
       const col = subs.length ? _byte_offset_to_col(line_content, subs[0].start) : 0;
 
       const rel_path = _rel_path(path_text, root);
@@ -255,14 +235,12 @@ export function _search_with_rg(
       file_matches.push(m);
 
     } else if (msg_type === "context") {
-
       ctx_lines.set(data.line_number ?? 0, rstrip_nl((data.lines && data.lines.text) || ""));
 
     } else if (msg_type === "end") {
       attachContext();
     }
   }
-
 
   attachContext();
 
@@ -283,9 +261,6 @@ export function _search_with_rg(
 
 
 function _rel_path(full, root) {
-
-
-
   const p = full.startsWith("./") ? full.slice(2) : full;
   try {
     if (path.isAbsolute(p)) {
@@ -301,8 +276,7 @@ function _rel_path(full, root) {
 
 
 export function _resolve_scope(path_arg, root) {
-
-  let p;
+    let p;
   try {
     p = abs_path(path_arg);
   } catch {
@@ -319,8 +293,6 @@ export function _resolve_scope(path_arg, root) {
   if (st.isDirectory() && p !== root_r && is_relative_to(p, root_r)) return p;
   return null;
 }
-
-
 
 
 export function _search_with_regex(
@@ -341,18 +313,12 @@ export function _search_with_regex(
 
   let pat;
   try {
-
-
-
-
-
     const src = literal ? escape_regex(pattern) : pattern;
     const body = whole_word ? `(?<!\\w)${src}(?!\\w)` : src;
     pat = new RegExp(body, flags);
   } catch (e) {
     return fail_response(`Invalid regex: ${e.message}`);
   }
-
 
   let base = root;
   let prefix = "";
@@ -407,8 +373,6 @@ export function _search_with_regex(
       if (m) {
         const cb = lines.slice(Math.max(0, idx - context_lines), idx);
         const ca = lines.slice(idx + 1, idx + 1 + context_lines);
-
-
         const col = Array.from(line.slice(0, m.index)).length;
         const match = make_match(fpath, idx + 1, col, line);
         match.context_before = cb;
@@ -435,8 +399,6 @@ export function _search_with_regex(
 }
 
 
-
-
 export function search_text(
   pattern,
   path_arg = ".",
@@ -453,7 +415,6 @@ export function search_text(
   const scope = _resolve_scope(path_arg, root);
   const ignore = [...DEFAULT_IGNORE, ...(extra_ignore ?? []), ...load_extra_ignore(root)];
 
-
   if (!pattern || !String(pattern).trim()) {
     return fail_response("Empty search pattern");
   }
@@ -464,19 +425,16 @@ export function search_text(
     );
   }
 
-
   context_lines = safe_int(context_lines, 2, 0, MAX_CONTEXT_LINES);
   max_results = safe_int(max_results, 50, 1, MAX_RESULTS_CAP);
   offset = safe_int(offset, 0, 0, 1e9);
 
   if (has_ripgrep()) {
-
     return _search_with_rg(
       String(pattern), root, scope, extensions, ignore,
       context_lines, case_insensitive, max_results, whole_word, literal, offset,
     );
   }
-
   return _search_with_regex(
     String(pattern), root, scope, extensions, [...ignore, ...load_vcs_ignore(root)],
     context_lines, case_insensitive, max_results, whole_word, literal, offset,
@@ -484,13 +442,9 @@ export function search_text(
 }
 
 
-
-
 function _resolve_scan_scope(path_arg, extra_ignore) {
-
-  const root = find_project_root(path_arg);
+    const root = find_project_root(path_arg);
   const scope = _resolve_scope(path_arg, root);
-
   const ignore = [...DEFAULT_IGNORE, ...(extra_ignore ?? []), ...load_extra_ignore(root), ...load_vcs_ignore(root)];
   let base = root;
   let prefix = "";
@@ -525,11 +479,13 @@ export function search_symbols(
   max_results = 50,
   extra_ignore = null,
   partial = true,
+  offset = 0,
 ) {
-
-  const needle = partial ? name.toLowerCase() : null;
+    const needle = partial ? name.toLowerCase() : null;
   const t0 = performance.now();
   max_results = safe_int(max_results, 50, 1, MAX_RESULTS_CAP);
+  offset = safe_int(offset, 0, 0, 1e9);
+  const stop = offset + max_results + 1;
   const { base, names, prefix } = _resolve_scan_scope(path_arg, extra_ignore);
 
   const matches = [];
@@ -564,38 +520,37 @@ export function search_symbols(
       if (kind && s.kind !== kind) continue;
       const line_text = s.line <= lines.length ? lines[s.line - 1] : "";
       matches.push({ file: fpath, symbol: s, line_text: rstrip(line_text) });
-      if (matches.length >= max_results) break;
+      if (matches.length >= stop) break;
     }
 
-    if (matches.length >= max_results) break;
+    if (matches.length >= stop) break;
   }
 
+  const window = matches.slice(offset, offset + max_results);
+  const has_more = matches.length > offset + max_results;
   const elapsed = performance.now() - t0;
   return {
     ok: true,
-    matches,
-    total: matches.length,
+    matches: window,
+    total: window.length,
     files_searched: searched,
     elapsed_ms: elapsed,
     skipped,
     error: "",
+    next_offset: has_more ? offset + window.length : null,
+    truncated: has_more,
   };
 }
 
 
-
-
-export function find_definition(name, path_arg = ".", extra_ignore = null, max_results = 50, substring_fallback = true) {
-
-  const priority = {
+export function find_definition(name, path_arg = ".", extra_ignore = null, max_results = 50, substring_fallback = true, offset = 0) {
+    const priority = {
     class: 0, struct: 0, interface: 0, trait: 0,
     enum: 1, type: 1, function: 2, method: 3,
   };
-
-
-
-
   max_results = safe_int(max_results, 50, 1, MAX_RESULTS_CAP);
+  offset = safe_int(offset, 0, 0, 1e9);
+  const stop = offset + max_results + 1;
   const { base, names, prefix } = _resolve_scan_scope(path_arg, extra_ignore);
   const needle = name.toLowerCase();
   const t0 = performance.now();
@@ -623,30 +578,29 @@ export function find_definition(name, path_arg = ".", extra_ignore = null, max_r
 
     for (const s of extract_symbols(lines, lang, fpath)) {
       if (s.name === name) {
-        if (exact.length < max_results) {
+        if (exact.length < stop) {
           const line_text = s.line <= lines.length ? lines[s.line - 1] : "";
           exact.push({ file: fpath, symbol: s, line_text: rstrip(line_text) });
         }
-      } else if (exact.length === 0 && sub.length < max_results && s.name.toLowerCase().includes(needle)) {
-
-
-
+      } else if (exact.length === 0 && sub.length < stop && s.name.toLowerCase().includes(needle)) {
         const line_text = s.line <= lines.length ? lines[s.line - 1] : "";
         sub.push({ file: fpath, symbol: s, line_text: rstrip(line_text) });
       }
     }
 
-    if (exact.length >= max_results) break;
+    if (exact.length >= stop) break;
   }
 
-  const matches = exact.length || !substring_fallback ? exact : sub;
-  const mode = matches === exact ? "exact" : "substring";
+  const pool = exact.length || !substring_fallback ? exact : sub;
+  const mode = pool === exact ? "exact" : "substring";
+  const window = pool.slice(offset, offset + max_results);
+  const has_more = pool.length > offset + max_results;
   const key = (m) => [
     m.symbol.name === name ? 0 : 1,
     Object.prototype.hasOwnProperty.call(priority, m.symbol.kind) ? priority[m.symbol.kind] : 99,
     m.symbol.line,
   ];
-  matches.sort((a, b) => {
+  window.sort((a, b) => {
     const ka = key(a);
     const kb = key(b);
     for (let i = 0; i < 3; i++) {
@@ -656,23 +610,21 @@ export function find_definition(name, path_arg = ".", extra_ignore = null, max_r
   });
   return {
     ok: true,
-    matches,
-    total: matches.length,
+    matches: window,
+    total: window.length,
     files_searched: searched,
     elapsed_ms: performance.now() - t0,
     skipped,
     error: "",
     match_mode: mode,
+    next_offset: has_more ? offset + window.length : null,
+    truncated: has_more,
   };
 }
 
 
-
-
 export function find_references(name, path_arg = ".", max_results = 100, extra_ignore = null, offset = 0) {
-
-
-
+  
   return search_text(
     name,
     path_arg,
@@ -688,14 +640,11 @@ export function find_references(name, path_arg = ".", max_results = 100, extra_i
 }
 
 
-
-
 export function project_tree(path_arg = ".", depth = 3, extra_ignore = null) {
   const root = find_project_root(path_arg);
   const scope = _resolve_scope(path_arg, root);
   const ignore = [...DEFAULT_IGNORE, ...(extra_ignore ?? []), ...load_extra_ignore(root)];
   depth = safe_int(depth, 3, 0, MAX_TREE_DEPTH);
-
 
   let start = root;
   if (scope) {
@@ -727,7 +676,6 @@ function _build_tree(root, current, depth, ignore) {
   } catch {
     return entries;
   }
-
 
   const items = [];
   for (const d of dirents) {
@@ -765,7 +713,6 @@ function _build_tree(root, current, depth, ignore) {
       try {
         entry.size = fs.statSync(full).size;
       } catch {
-
       }
       entries.push(entry);
     }

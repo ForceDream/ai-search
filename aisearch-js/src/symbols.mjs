@@ -1,8 +1,6 @@
 
-
 import { count_char, lstrip, rstrip } from "./util.mjs";
 import { detect_lang } from "./config.mjs";
-
 
 
 export function make_symbol(kind, name, line, indent = 0) {
@@ -25,11 +23,6 @@ export function symbol_to_dict(s) {
 }
 
 
-
-
-
-
-
 const _JS_KW = "get|set|if|for|while|switch|catch|return|typeof|new|do|else|await|class|function|with|try|finally|throw|delete|yield|using|lock";
 
 const PYTHON_PATTERNS = [
@@ -42,7 +35,6 @@ const JAVASCRIPT_PATTERNS = [
   ["function", /^(\s*)(?:export\s+(?:default\s+)?)?(?:async\s+)?function\s+(\w+)/, 2],
   ["function", /^(\s*)(?:export\s+)?(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?\(/, 2],
   ["function", /^(\s*)(?:export\s+)?(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?(?:\([^)]*\)|\w+)\s*=>/, 2],
-
   ["method", new RegExp(
     "^(\\s*)(?:async\\s+)?(?!(?:" + _JS_KW + ")\\b)(\\w+)\\s*\\([^)]*\\)\\s*[\\{:]"
   ), 2],
@@ -50,8 +42,6 @@ const JAVASCRIPT_PATTERNS = [
 
 const TYPESCRIPT_EXTRA = [
   ["interface", /^(\s*)(?:export\s+)?interface\s+(\w+)/, 2],
-
-
   ["type", /^(\s*)(?:export\s+)?type\s+(\w+)\s*[=<{]/, 2],
   ["enum", /^(\s*)(?:export\s+)?(?:const\s+)?enum\s+(\w+)/, 2],
 ];
@@ -68,8 +58,6 @@ const RUST_PATTERNS = [
   ["struct", /^(\s*)(?:pub\s+)?struct\s+(\w+)/, 2],
   ["enum", /^(\s*)(?:pub\s+)?enum\s+(\w+)/, 2],
   ["trait", /^(\s*)(?:pub\s+)?trait\s+(\w+)/, 2],
-
-
   ["impl", /^(\s*)impl(?:\s*<[^>]*>)?\s+(?:.*?\sfor\s+)?(\w+)\s*(?:<[^>]*>)?\s*(?:\{|where|$)/, 2],
   ["type", /^(\s*)(?:pub\s+)?type\s+(\w+)/, 2],
   ["macro", /^(\s*)(?:pub\s+)?macro_rules!\s+(\w+)/, 2],
@@ -146,7 +134,6 @@ const CLASS_KINDS = new Set([
 ]);
 
 
-
 const _compiled_cache = new Map();
 
 function _get_compiled(lang) {
@@ -158,14 +145,10 @@ function _get_compiled(lang) {
 }
 
 
-
-
-
-
 export const MAX_SYMBOLS_PER_FILE = 5000;
 
 export function extract_symbols(lines, lang, file_path = "") {
-
+  
   const compiled = _get_compiled(lang);
   if (!compiled.length) return [];
 
@@ -179,7 +162,6 @@ export function extract_symbols(lines, lang, file_path = "") {
     const stripped = rstrip(line);
     if (!stripped) continue;
     const ls = lstrip(stripped);
-
     if (ls.startsWith("#") || ls.startsWith("//") || ls.startsWith("--")) continue;
 
     const indent = line.length - lstrip(line).length;
@@ -191,7 +173,6 @@ export function extract_symbols(lines, lang, file_path = "") {
         if (!name) continue;
 
         const sym = make_symbol(cp.kind, name, lineno, indent);
-
 
         if (CLASS_KINDS.has(cp.kind)) {
           current_class = name;
@@ -205,15 +186,13 @@ export function extract_symbols(lines, lang, file_path = "") {
     }
   }
 
-
   _calc_ranges(symbols, lines, lang);
   return symbols;
 }
 
 
 export function iter_symbol_decls(lineIter, lang) {
-
-  const compiled = _get_compiled(lang);
+    const compiled = _get_compiled(lang);
   if (!compiled.length) return [];
   const symbols = [];
   let current_class = "";
@@ -247,15 +226,14 @@ export function iter_symbol_decls(lineIter, lang) {
 
 
 export function compute_symbol_end_from_chunk(chunk, lang, sym) {
-
-  const temp = make_symbol(sym.kind, sym.name, 1, sym.indent);
+    const temp = make_symbol(sym.kind, sym.name, 1, sym.indent);
   _calc_ranges([temp], chunk, lang);
   return sym.line - 1 + temp.line_end;
 }
 
 
 export function _calc_ranges(symbols, lines, lang) {
-
+  
   if (!symbols.length) return;
 
   const brace_langs = new Set([
@@ -265,9 +243,6 @@ export function _calc_ranges(symbols, lines, lang) {
   const n = lines.length;
 
   if (brace_langs.has(lang)) {
-
-
-
     const delta = new Array(n).fill(0);
     const opens = new Array(n).fill(false);
     for (let j = 0; j < n; j++) {
@@ -292,8 +267,6 @@ export function _calc_ranges(symbols, lines, lang) {
       const act = next_open[start0];
       if (act < n) {
         if (!activate_at.has(act)) activate_at.set(act, []);
-
-
         activate_at.get(act).push([idx, depth[start0]]);
         activated.add(idx);
       }
@@ -312,7 +285,6 @@ export function _calc_ranges(symbols, lines, lang) {
         }
       }
       const d_after = depth[j + 1];
-
       while (max_base !== null && max_base >= d_after) {
         for (const idx of active.get(max_base) ?? []) end_of.set(idx, j + 1);
         active.delete(max_base);
@@ -332,9 +304,6 @@ export function _calc_ranges(symbols, lines, lang) {
     if (brace_langs.has(lang)) {
       continue;
     } else {
-
-
-
       const base_indent = sym.indent;
       const j0 = sym.line - 1;
       let header_end = j0;
@@ -365,7 +334,6 @@ export function _calc_ranges(symbols, lines, lang) {
           break;
         }
       }
-
       while (end > sym.line && lines[end - 1].trim() === "") end -= 1;
       sym.line_end = Math.max(end, sym.line);
     }
@@ -374,11 +342,10 @@ export function _calc_ranges(symbols, lines, lang) {
 
 
 export function find_symbol_by_name(lines, lang, name, partial = false) {
-
+  
   const syms = extract_symbols(lines, lang);
   for (const s of syms) {
     if (partial) {
-
       if (s.name.toLowerCase().includes(name.toLowerCase())) {
         return s;
       }
@@ -391,7 +358,7 @@ export function find_symbol_by_name(lines, lang, name, partial = false) {
 
 
 export function find_containing_symbol(lines, lang, target_line) {
-
+  
   const syms = extract_symbols(lines, lang);
   let best = null;
   let best_size = Infinity;
@@ -410,9 +377,8 @@ export function find_containing_symbol(lines, lang, target_line) {
 
 
 export function extract_imports(lines, lang) {
-
+  
   const imports = [];
-
 
   if (lang === "go") {
     let in_block = false;

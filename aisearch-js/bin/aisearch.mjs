@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 
-
 import { VERSION, is_output_tty } from "../src/config.mjs";
 import {
   search_text,
@@ -14,7 +13,6 @@ import {
 import { read_file, get_context, read_result_to_dict, context_result_to_dict } from "../src/reader.mjs";
 import { run_rpc } from "../src/rpc.mjs";
 import { py_int } from "../src/util.mjs";
-
 
 
 class UsageError extends Error {}
@@ -37,7 +35,7 @@ function parse_int_arg(flag, value) {
 }
 
 function parse_args(argv, positional_names, flag_specs) {
-
+  
   const values = {};
   const positional = [];
   const flag_map = build_flag_map(flag_specs);
@@ -148,7 +146,6 @@ const COMMON_END_FLAGS = [
 ];
 
 
-
 function main() {
   const argv = process.argv.slice(2);
 
@@ -185,8 +182,6 @@ function main() {
       process.stderr.write(`${HELP.split("\n")[0]}\naisearch: error: ${e.message}\n`);
       process.exit(2);
     }
-
-
     const use_json = !rest.includes("--text") &&
       (rest.includes("--json") || !process.stdout.isTTY);
     if (use_json) {
@@ -199,10 +194,9 @@ function main() {
 }
 
 function choose_output(args) {
-
+  
   if (args.text) return false;
   if (args.json) return true;
-
   return !is_output_tty();
 }
 
@@ -211,7 +205,6 @@ function require_arg(args, key, cmd) {
     throw new UsageError(`the following arguments are required: ${key} (see: aisearch ${cmd} -h)`);
   }
 }
-
 
 
 function cmd_grep(rest) {
@@ -313,7 +306,6 @@ function cmd_cat(rest) {
   require_arg(args, "file", "cat");
   const use_json = choose_output(args);
 
-
   const result = read_file(args.file, args.path ?? ".", Boolean(args.outline), "system", !use_json);
   if (use_json) print_json(read_result_to_dict(result));
   else print_cat_text(read_result_to_dict(result));
@@ -342,7 +334,6 @@ function cmd_ctx(rest) {
     process.exit(1);
   }
 
-
   const result = get_context(file_ref, line, args.path ?? ".", args.radius ?? 5, "system", !use_json);
   if (use_json) print_json(context_result_to_dict(result));
   else print_ctx_text(context_result_to_dict(result));
@@ -368,14 +359,12 @@ function cmd_rpc(rest) {
 }
 
 
-
-
 function print_json(data) {
   console.log(JSON.stringify(data, null, 2));
 }
 
 function print_grep_text(resp) {
-
+  
   if (!resp.ok) {
     process.stderr.write(`Error: ${resp.error}\n`);
     return;
@@ -512,7 +501,6 @@ function print_ctx_text(result) {
   const content = d.content ?? "";
   if (content) {
     const content_lines = content.split("\n");
-
     const start_line = d.window_start || Math.max(1, line - Math.floor(content_lines.length / 2));
     console.log("");
     for (let i = 0; i < content_lines.length; i++) {
@@ -537,7 +525,7 @@ function print_ctx_text(result) {
 }
 
 function print_tree_text(tree_data) {
-
+  
   const root = tree_data.root ?? ".";
   const entries = tree_data.tree ?? [];
   console.log(`\x1b[1;35m${root}\x1b[0m`);

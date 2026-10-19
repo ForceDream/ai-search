@@ -34,8 +34,8 @@ aisearch rpc --root /path/to/proj  # 锁定项目根（boundary=root，拦截 ..
 | method | params | data 关键字段 |
 |---|---|---|
 | `search` | `pattern`(必), `path`, `context`=2, `limit`=50, `ignore_case`, `whole_word`, `extensions`=[], `offset`=0, `count_only` | `matches[{file,line,col,text,symbol?,context_before,context_after}]`, `total`, `files_searched`, `elapsed_ms`, `next_offset?`, `skipped?`；`col` 为行内匹配起点的**码点**偏移（0 基，非字节、非 UTF-16 码元）；`offset` 分页，池里有剩余时回 `next_offset`（缺席 = 本池已尽）；`count_only:true` 只回统计字段 |
-| `symbols` | `name`(必), `path`, `kind`, `limit`=50, `partial`=true, `count_only` | `matches[{file,kind,name,line,line_end,parent?,text}]`, `total`, `files_searched`, `skipped?` |
-| `def` | `name`(必), `path`, `limit`?=50, `substring_fallback`?=true, `count_only` | **两级匹配**：exact 优先——候选全部来自定义正则且符号名完全相等（`match_mode:"exact"`），杜绝子串命中稀释与 import/使用行混入；exact 无命中时回退子串匹配并标 `match_mode:"substring"`（候选需核对）。`substring_fallback:false` 关闭回退。排序：精确名 > class/struct/interface/trait > enum/type > function > method > 行号 |
+| `symbols` | `name`(必), `path`, `kind`, `limit`=50, `partial`=true, `offset`=0, `count_only` | `matches[{file,kind,name,line,line_end,parent?,text}]`, `total`, `files_searched`, `next_offset?`, `truncated?`, `skipped?`；`offset` 分页（扫描序），池里有剩余时回 `next_offset` + `truncated:true`（缺席 = 本池已尽）；`total` 是本次返回条数，不是存在总数 |
+| `def` | `name`(必), `path`, `limit`?=50, `substring_fallback`?=true, `offset`=0, `count_only` | **两级匹配**：exact 优先——候选全部来自定义正则且符号名完全相等（`match_mode:"exact"`），杜绝子串命中稀释与 import/使用行混入；exact 无命中时回退子串匹配并标 `match_mode:"substring"`（候选需核对）。`substring_fallback:false` 关闭回退。排序（**页内**）：精确名 > class/struct/interface/trait > enum/type > function > method > 行号。`offset` 分页按**扫描序**翻窗、排序只作用于页内（跨页不保证全局排序，但页间严格平铺无重叠/无遗漏）；截断时回 `next_offset` + `truncated:true`；`total` 是本次返回条数，不是存在总数 |
 | `ref` | `name`(必), `path`, `limit`=100, `offset`=0, `count_only` | 同 `search`（全词匹配的引用位置，含 `offset` 分页与 `next_offset`） |
 | `read` | `file`(必), `path`, `outline`=false, `line_numbers`=false | `file`, `lines{start,end}`, `total_lines`, `content`, `language?`, `symbol?`, `symbols?`, `truncated?`, `line_numbers?`；`line_numbers:true` 时 `content` 每行带行号前缀（从 `lines.start` 起算）——写入定位专用，默认关闭（避免 ~2x token 浪费） |
 | `context` | `file`(必), `line`(必), `radius`=5, `path` | **metadata 前置、`content` 殿后**：`file`, `line`, `language?`, `containing_symbol?`, `imports?`, `total_lines?`, `window_start?`, `truncated?`, `content` |
@@ -67,7 +67,7 @@ aisearch rpc --root /path/to/proj  # 锁定项目根（boundary=root，拦截 ..
 
 | 项 | 上限 / 行为 |
 |---|---|
-| 单次结果数 | 5000（`limit` 会被钳制到该值） |
+| 单次结果数 | 5000（`limit` 会被钳制到该值）；`def`/`symbols` 默认 `limit=50`、`ref` 默认 100，均可用 `limit` 手动调大；截断时 `def`/`symbols`/`search`/`ref` 响应带 `next_offset`（`def`/`symbols` 另带 `truncated:true`） |
 | 上下文行数 | 200 |
 | 目录树深度 | 16 |
 | 搜索模式长度 | 256 字符 |
@@ -89,7 +89,7 @@ Python（`<SKILL_DIR>/scripts/aisearch/`）与 Node（`<SKILL_DIR>/scripts/aisea
 
 已知差异仅一处：纯 JS 回退引擎的 `\w` / `\b` 为 **ASCII 语义**，而 Python `re` 与 `rg` 为 **Unicode 语义**；因此含中文标识符的模式（如 `def \w+_\w+` 命中 `def 函数_gbk`）在**未安装 ripgrep** 时两版结果可能不同。需要严格一致时用显式字符类（如 `[A-Za-z0-9_]+`）或安装 `rg`。
 
-非字段级差异：坏正则的错误文案来自各自正则引擎的原生消息（`ok:false` 形态一致）；分页游标在装 rg 时基于 rg 全量池、未装 rg 时基于窗口 + 1 条前瞻，`next_offset` 的出现与否可能不同（装 rg 时更准）；`skipped` 只在回退引擎出现（rg 自己处理二进制与体积）。
+非字段级差异：坏正则的错误文案来自各自正则引擎的原生消息（`ok:false` 形态一致）；分页游标在装 rg 时基于 rg 全量池、未装 rg 时基于窗口 + 1 条前瞻，`next_offset` 的出现与否可能不同（装 rg 时更准）；`skipped` 只在回退引擎出现（rg 自己处理二进制与体积）。`def`/`symbols` 的分页恒为窗口 + 1 条前瞻（不涉及 rg，装不装 ripgrep 行为一致）。
 
 装/不装 ripgrep 的**结果集**口径已对齐：隐藏路径与 `.gitignore` 规则在两条路径下都生效（回退路径按近似语义实现，见 §5）。
 

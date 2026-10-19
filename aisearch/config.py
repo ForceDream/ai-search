@@ -7,7 +7,6 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-
 DEFAULT_IGNORE: list[str] = [
     ".git", ".svn", ".hg",
     "node_modules", "__pycache__", ".pytest_cache",
@@ -19,18 +18,15 @@ DEFAULT_IGNORE: list[str] = [
     "vendor", "Pods", ".next", ".nuxt",
 ]
 
-
 MAX_SEARCH_BYTES = 32 * 1024 * 1024
 
 
 def looks_binary(path, probe: int = 8192) -> bool:
-    """文件头部含 NUL 视为二进制：搜索不按文本读它（rg 路径自带该判断）。"""
     try:
         with open(path, "rb") as f:
             return b"\x00" in f.read(probe)
     except OSError:
         return False
-
 
 
 EXT_LANG: dict[str, str] = {
@@ -72,15 +68,11 @@ EXT_LANG: dict[str, str] = {
     ".dockerfile": "dockerfile",
 }
 
-
 CODE_EXTS: set[str] = set(EXT_LANG.keys())
-
-
 
 
 def detect_lang(path: str | Path) -> Optional[str]:
     p = Path(path)
-
     name = p.name.lower()
     if name in ("dockerfile", "makefile", "rakefile", "gemfile"):
         return name
@@ -90,13 +82,6 @@ def detect_lang(path: str | Path) -> Optional[str]:
 
 
 def should_ignore(name: str, ignore_list: list[str], rel_path: str = "") -> bool:
-    """
-    判断是否应忽略。
-    支持：精确目录/文件名、*.ext 通配、以及含 / 的相对路径前缀（如 src/generated）。
-    rel_path 为相对项目根的路径，用于路径前缀匹配。
-    """
-
-
     rel_norm = rel_path.replace("\\", "/") if rel_path else ""
     for pat in ignore_list:
         pat_norm = pat.replace("\\", "/")
@@ -130,10 +115,8 @@ def find_project_root(start: str = ".") -> Path:
 
 
 def _read_ignore_file(path: Path) -> list[str]:
-    """读取忽略文件：跳过空行、注释行与否定行（! 否定不支持）。"""
     if not path.exists():
         return []
-
     try:
         text = path.read_text(encoding="utf-8", errors="replace")
     except (OSError, PermissionError):
@@ -147,17 +130,14 @@ def _read_ignore_file(path: Path) -> list[str]:
 
 
 def load_extra_ignore(root: Path) -> list[str]:
-    """读取 .aisearchignore 中的额外忽略规则。"""
     return _read_ignore_file(root / ".aisearchignore")
 
 
 def load_vcs_ignore(root: Path) -> list[str]:
-    """读取 .gitignore 供回退引擎对齐 rg（近似：精确名 / *.ext / 路径前缀）。"""
     return _read_ignore_file(root / ".gitignore")
 
 
 def is_hidden(name: str) -> bool:
-    """点开头的文件/目录（rg 默认跳过）。"""
     return name.startswith(".") and name not in (".", "..")
 
 
@@ -166,7 +146,6 @@ def is_output_tty() -> bool:
 
 
 def is_relative_to(path: Path, other: Path) -> bool:
-    """跨版本兼容的 Path.is_relative_to（3.9+ 原生支持）。"""
     try:
         path.relative_to(other)
         return True
@@ -175,10 +154,6 @@ def is_relative_to(path: Path, other: Path) -> bool:
 
 
 def detect_encoding(path, chunk: int = 65536) -> str:
-    """
-    探测文件编码，优先 BOM，否则按 utf-8 → gb18030 试探，兜底 utf-8(replace)。
-    解决 Windows 上大量 GBK/GB18030 中文文档被当 UTF-8 读成乱码的问题。
-    """
     data = b""
     try:
         with open(path, "rb") as f:
@@ -203,7 +178,6 @@ def detect_encoding(path, chunk: int = 65536) -> str:
 
 
 def read_text_auto(path) -> str:
-    """读取文本并自动探测编码（utf-8/gb18030/utf-16）。仅用于中小文件。"""
     enc = detect_encoding(path)
     try:
         return Path(path).read_text(encoding=enc, errors="replace")
@@ -212,19 +186,8 @@ def read_text_auto(path) -> str:
 
 
 def safe_resolve(ref: str, root: Path, boundary: str = "root") -> Path:
-    """
-    将 ref 解析为绝对路径，并按边界策略校验。
-
-    boundary:
-      "root"   —— 只允许 root 目录内的路径（用于 rpc --root，防止
-                  通过 `../../etc/passwd` 之类的相对路径越权读取）
-      "system" —— 允许任意路径（用于本地 CLI 显式指定系统路径，如 `aisearch cat /etc/hosts`）
-
-    注意：会拒绝包含 NUL 字节的路径。
-    """
     if "\x00" in ref:
         raise ValueError("Path contains NUL byte")
-
 
     p = Path(ref)
     full = (p if p.is_absolute() else (root / ref)).resolve()
@@ -241,13 +204,10 @@ def build_file_list(
     extensions: Optional[set[str]] = None,
     ignore: Optional[list[str]] = None,
 ) -> list[str]:
-    """递归遍历项目文件列表。"""
     ignore = ignore or DEFAULT_IGNORE
     files: list[str] = []
     for dirpath, dirnames, filenames in os.walk(root):
         cur = Path(dirpath)
-
-
         dirnames[:] = sorted(
             d for d in dirnames
             if not is_hidden(d) and not should_ignore(d, ignore, rel_path=_rel_of(cur / d, root))
